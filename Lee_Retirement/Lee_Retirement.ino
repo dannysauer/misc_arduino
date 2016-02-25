@@ -20,6 +20,8 @@
 #include <Time.h>
 #include <TimeLib.h>
 
+tmElements_t tm;
+
 /*
  Set up for the LCD
 */
@@ -138,6 +140,9 @@ void loop() {
   // assemble second LCD line
   line2 = "inc:" + String(brightness_increment);
   secs = String(millis()/1000);
+  if(RTC.read(tm)){
+    secs = "ok!" + String(tm.Second);
+  }
   while( line2.length() < 16 - secs.length() ){
     line2 = line2 + " ";
   }
