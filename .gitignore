@@ -31,4 +31,4 @@
 libraries/DS1307RTC/
 libraries/Time/
 libraries/dev/
-
+libraries/EEPROMEx/
