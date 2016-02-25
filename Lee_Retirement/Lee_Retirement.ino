@@ -56,7 +56,6 @@ String key;
 #define BrightMax 255
 #define BrightMin 0
 int brightness_increment = -2;
-int brightness = BrightMax;
 
 // read the buttons
 int read_LCD_buttons()
@@ -77,19 +76,50 @@ int read_LCD_buttons()
  return btnNONE;  // when all others fail, return this...
 }
 
+/*
+ EEPROM locations
+*/
+#include <EEPROM.h>
+#define ADDR_RETIRE_TIME 0
+time_t retire_time;
+#define ADDR_BRIGHTNESS  ADDR_RETIRE_TIME + sizeof(time_t)
+int brightness = BrightMax;
+
+/*
+ Menu stuff
+*/
+#define NO_MENU           0
+#define RETIRE_TIME_MENU  1
+#define CURRENT_TIME_MENU 2
+#define BRIGHTNESS_MENU   3
+int menustate = NO_MENU;
+int menuvalue = 0;
+String menuheader = "";
+String menuvalue_label = "";
+
+void menu(){
+  switch (menustate){
+    case RETIRE_TIME_MENU: {
+      break;
+    }
+  }
+}
+
 void setup() {
   // define PWM brightness pin for output
   pinMode(PinBacklight, OUTPUT);
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   lcd.clear();
+  // get data from EEPROM
+  EEPROM.get(ADDR_RETIRE_TIME, retire_time);
+  EEPROM.get(ADDR_BRIGHTNESS,  brightness);
 }
 
 void loop() {
   lcd_key = read_LCD_buttons();
   switch (lcd_key){
     case btnNONE: {
-      key = "NONE";
       break;
     }
     case btnRIGHT: {
