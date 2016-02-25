@@ -26,3 +26,9 @@
 *.exe
 *.out
 *.app
+
+# Libraries that aren't mine
+libraries/DS1307RTC/
+libraries/Time/
+libraries/dev/
+
