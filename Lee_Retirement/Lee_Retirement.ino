@@ -55,7 +55,6 @@ String key;
 
 #define BrightMax 255
 #define BrightMin 0
-int brightness_increment = -2;
 
 // read the buttons
 int read_LCD_buttons()
@@ -128,6 +127,7 @@ void loop() {
       if( brightness >= BrightMax ){
         brightness = BrightMax;
       }
+      EEPROM.update(ADDR_BRIGHTNESS, brightness);
       break;
     }
     case btnLEFT: {
@@ -136,6 +136,7 @@ void loop() {
       if( brightness <= BrightMin ){
         brightness = BrightMin;
       }
+      EEPROM.update(ADDR_BRIGHTNESS, brightness);
       break;
     }
     case btnUP: {
@@ -157,7 +158,7 @@ void loop() {
   }
   analogWrite(PinBacklight, brightness);
 
-  // assemble LCD line
+  // assemble first LCD line
   line1 = "";
   line1 = "ADC:" + String(adc_key_in);
   while( line1.length() < 16 - key.length() ){
@@ -168,7 +169,7 @@ void loop() {
   lcd.print(line1);
 
   // assemble second LCD line
-  line2 = "inc:" + String(brightness_increment);
+  line2 = "bright:" + String(brightness);
   secs = String(millis()/1000);
   if(RTC.read(tm)){
     secs = "ok!" + String(tm.Second);
