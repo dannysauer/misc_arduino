@@ -1,20 +1,25 @@
 /*
- Testing buttons as well
+ * Lee's retirement countdown clock
+ *
+ * I'm using a SainSmart LCD shield with an Uno, and a DS1370 RTC to make it accurate
+ *
+ * Links to the Amazon items I used:
+ * http://www.amazon.com/gp/product/B0076FWAH8
+ * http://www.amazon.com/gp/product/B00LZCTMJM
+ */
+
+
+/* 
+ set up for the RTC
+*/
+#include <DS1307RTC.h>
+#include <Time.h>
+#include <TimeLib.h>
+
+/*
+ Set up for the LCD
 */
 #include <LiquidCrystal.h>
-
-// initialize the library with the numbers of the interface pins
-/* LCD Shield mappings:
- D8, // RS
- D9, // Enable
- D4, // bit 4
- D5, // bit 5
- D6, // bit 6
- D7  // bit 7
- D10 // backlight brightness
- A0  // buttons
- So, LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
-*/
 LiquidCrystal lcd(
  8, // RS
  9, // Enable
@@ -51,30 +56,18 @@ int brightness = BrightMax;
 int read_LCD_buttons()
 {
  adc_key_in = analogRead(PinButton);      // read the value from the sensor 
- //return adc_key_in;
  // example buttons when read are centered at these valies: 0, 144, 329, 504, 741
  // values measured in Lee's display: 0, 143, 328, 503, 741 (really close to the author's, apparently)
- // we add half the distance to the next button to allow for as much variance as is reasonably likely
+ // I add half the distance to the next button to allow for as much variance as is reasonably likely
  //
- // I picked 1000 as the top value mostly arbitrarily; ~1024 is the select, due to being a "short"
+ // I picked 1000 as the top cutoff mostly arbitrarily; ~1024 is the select, due to being "infinite"
  // I suppose the "right" way would be to do 741+(1024-741/2) to be consistent
  if (adc_key_in > 1000) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
- // For V1.1 us this threshold
  if (adc_key_in < (0   + (143 - 0)   / 2 ))  return btnRIGHT;  
  if (adc_key_in < (143 + (328 - 143) / 2 ))  return btnUP; 
  if (adc_key_in < (328 + (503 - 328) / 2 ))  return btnDOWN; 
  if (adc_key_in < (503 + (741 - 503) / 2 ))  return btnLEFT; 
  if (adc_key_in <= 1000)                     return btnSELECT;  
-
- // For V1.0 comment the other threshold and use the one below:
-/*
- if (adc_key_in < 50)   return btnRIGHT;  
- if (adc_key_in < 195)  return btnUP; 
- if (adc_key_in < 380)  return btnDOWN; 
- if (adc_key_in < 555)  return btnLEFT; 
- if (adc_key_in < 790)  return btnSELECT;   
-*/
-
  return btnNONE;  // when all others fail, return this...
 }
 
