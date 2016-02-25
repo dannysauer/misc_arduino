@@ -8,10 +8,14 @@
  * http://www.amazon.com/gp/product/B00LZCTMJM
  */
 
-
 /* 
  set up for the RTC
+ Libraries used are at
+  http://www.pjrc.com/teensy/td_libs_Time.html
+  http://www.pjrc.com/teensy/td_libs_DS1307RTC.html
+ as referenced by http://playground.arduino.cc/Code/Time
 */
+#include <Wire.h>
 #include <DS1307RTC.h>
 #include <Time.h>
 #include <TimeLib.h>
