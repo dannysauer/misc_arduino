@@ -87,21 +87,45 @@ int brightness = BrightMax;
 /*
  Menu stuff
 */
-#define NO_MENU           0
-#define RETIRE_TIME_MENU  1
-#define CURRENT_TIME_MENU 2
-#define BRIGHTNESS_MENU   3
-int menustate = NO_MENU;
-int menuvalue = 0;
-String menuheader = "";
-String menuvalue_label = "";
+#include <MenuSystem.h>
+// #include "./lee_retirement_menu.h"
+/*
+ * Menu definitions in header file to work around silly Arduino editor
+ * which moves all function prototypes to top of file - above #include. :/
+ */
+MenuSystem ms;
+Menu mm("Configuration menu");
+MenuItem mi_backlight("Backlight Brightness");
 
-void menu(){
-  switch (menustate){
-    case RETIRE_TIME_MENU: {
-      break;
-    }
-  }
+Menu     mm_retirement(       "Retirement Date"  );
+MenuItem mi_retirement_year(  "Retirement Year"  );
+MenuItem mi_retirement_month( "Retirement Month" );
+MenuItem mi_retirement_day(   "Retirement Day"   );
+
+/*
+ Arduino adds prototypes for any unprototyped functions at the top of
+ the file - above #include statements.  Using a type defined by an
+ #include statement makes for a bad day, therefore.  So, prototype all of
+ the menu callback functions. :/
+*/
+void mcb_backlight(MenuItem* pmi);
+void mcb_backlight(MenuItem* pmi){
+  //
+}
+
+void mcb_retirement_year(MenuItem* pmi);
+void mcb_retirement_year(MenuItem* pmi){
+  //
+}
+
+void mcb_retirement_month(MenuItem* pmi);
+void mcb_retirement_month(MenuItem* pmi){
+  //
+}
+
+void mcb_retirement_day(MenuItem* pmi);
+void mcb_retirement_day(MenuItem* pmi){
+  //
 }
 
 void setup() {
@@ -110,9 +134,17 @@ void setup() {
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   lcd.clear();
-  // get data from EEPROM
+
+  // get saved data from EEPROM
   EEPROM.get(ADDR_RETIRE_TIME, retire_time);
   EEPROM.get(ADDR_BRIGHTNESS,  brightness);
+
+  // assemble menu
+  mm.add_item(&mi_backlight, &mcb_backlight);
+  mm.add_menu(&mm_retirement);
+  mm_retirement.add_item(&mi_retirement_year,  &mcb_retirement_year);
+  mm_retirement.add_item(&mi_retirement_month, &mcb_retirement_month);
+  mm_retirement.add_item(&mi_retirement_day,   &mcb_retirement_day);
 }
 
 void loop() {
