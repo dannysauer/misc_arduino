@@ -11,7 +11,7 @@
 //#include <Chronos.h>
 
 /* 
- set up for the RTC
+ set up for the RTC and other time stuff
  Libraries used are at
   http://www.pjrc.com/teensy/td_libs_Time.html
   http://www.pjrc.com/teensy/td_libs_DS1307RTC.html
@@ -22,7 +22,53 @@
 #include <Time.h>
 #include <TimeLib.h>
 
-tmElements_t tm;
+#define UTC_OFFSET -6 * 60 * 60; // ignoring DTV, Central time is UTC-6 hours
+
+// http://www.nist.gov/pml/div688/dst.cfm
+bool is_dst(time_t t){
+  int M = month(t);
+  int D = day(t);
+  int wday = weekday(t);
+  // do no-math checks first for speed
+  if( M > 3 && M < 11 ){
+    return true;
+  }
+  if( M < 3 || M > 11 ){
+    return false;
+  }
+  signed int previousSunday = D - wday;
+  // DST starts at 2AM on the second Sunday of March
+  if( M == 3 ){
+    // Second Sunday would be between the 8th and 15th
+    return previousSunday >= 7;
+  }
+  // DST stops at 2AM on the first Sunday of November
+  if( M == 11 ){
+    // first Sunday will be between the between the first and the 7th.
+    return previousSunday <= 0;
+  }
+}
+
+String format_time(time_t t){
+  int m = minute(t);
+  int s = second(t);
+  return String(hourFormat12(t)) + ":"
+       + (m < 10 ? "0" : "") + String(m) + ":"
+       + (s < 10 ? "0" : "") + String(s)
+       + " " + (isAM(t) ? "AM" : "PM");
+}
+String format_date(time_t t){
+  return String(month(t)) + "/"
+       + String(day(t)  ) + "/"
+       + String(year(t) );
+}
+//time_t get_current_time(time_t* t){
+void get_current_time(time_t* t){
+  *t = now();
+  *t += UTC_OFFSET; //timezone adjustment
+  *t += is_dst(*t) ? 60*60 : 0; // add an hour if DST currently applies
+  //return t;
+}
 
 /*
  Set up for the LCD
@@ -74,6 +120,40 @@ int read_LCD_buttons()
  if (adc_key_in <= 1000)                     return btnSELECT;  
  return btnNONE;  // when all others fail, return this...
 }
+void wait_for_button_release(){
+  // after reading a button, wait until we see no buttons
+  while( read_LCD_buttons() != btnNONE ){
+    pause(10);
+  }
+  // then wait 20ms and see if it's still at none
+  pause(20);
+  while( read_LCD_buttons() != btnNONE ){
+    pause(10);
+  }
+}
+
+void pad( String* s ){
+  while( s->length() < 16 ){
+    *s += " ";
+  }
+}
+// only update LCD if intended display != what's already displayed
+String prevline1 = "";
+String prevline2 = "";
+void update_lcd(String l1, String l2){
+  pad(&l1);
+  pad(&l2);
+  if( l1 != prevline1 ){
+    lcd.setCursor(0,0);
+    lcd.print(l1);
+    prevline1 = l1;
+  }
+  if( l2 != prevline2 ){
+    lcd.setCursor(0,1);
+    lcd.print(l2);
+    prevline2 = l2;
+  }
+}
 
 /*
  EEPROM locations
@@ -88,7 +168,7 @@ int brightness = BrightMax;
  Menu stuff
 */
 #include <MenuSystem.h>
-// #include "./lee_retirement_menu.h"
+int exit_menu = 0;
 /*
  * Menu definitions in header file to work around silly Arduino editor
  * which moves all function prototypes to top of file - above #include. :/
@@ -112,6 +192,7 @@ void mcb_backlight(MenuItem* pmi);
 void mcb_backlight(MenuItem* pmi){
   //
   //EEPROM.update(ADDR_BRIGHTNESS, brightness);
+  exit_menu=1;
 }
 
 void mcb_retirement_year(MenuItem* pmi);
@@ -129,6 +210,70 @@ void mcb_retirement_day(MenuItem* pmi){
   //
 }
 
+void more_bright(){
+  if( brightness >= BrightMax ){
+    brightness = BrightMax;
+  }
+  analogWrite(PinBacklight, brightness);
+}
+
+void less_bright(){
+  if( brightness >= BrightMax ){
+    brightness = BrightMax;
+  }
+  analogWrite(PinBacklight, brightness);
+}
+
+void menuLoop(){
+  exit_menu = 0;
+  Menu const* cm;
+  // we came here due to a button press; wait for it to come back up.
+  wait_for_button_release();
+  int prevbutton = btnNONE;
+  while(!exit_menu){
+    cm = ms.get_current_menu();
+    update_lcd(
+      "m:" + String(cm->get_name()),
+      cm->get_selected()->get_name()
+      );
+    switch (prevbutton = read_LCD_buttons()){
+      case btnNONE: {
+        break;
+      }
+      case btnRIGHT: {
+        ms.next();
+        break;
+      }
+      case btnLEFT: {
+        ms.prev();
+        break;
+      }
+      case btnUP: {
+        ms.back();
+        break;
+      }
+      case btnDOWN: {
+        break;
+      }
+      case btnSELECT: {
+        ms.select();
+        break;
+      }
+    }
+    if( prevbutton != btnNONE ){
+      wait_for_button_release();
+    }
+  }
+}
+
+// delay() ties the processor up. This should mostly avoid that.
+void pause(unsigned long d){
+  unsigned long start_milli = millis();
+  while( millis() - start_milli < d ){
+    // nothin'  
+  }
+}
+
 void setup() {
   // get saved data from EEPROM
   EEPROM.get(ADDR_RETIRE_TIME, retire_time);
@@ -142,6 +287,7 @@ void setup() {
   analogWrite(PinBacklight, brightness);
 
   // configure clock to use RTC
+  tmElements_t tm;
   if(! RTC.read(tm)){
     // RTC isn't working
     while(true){
@@ -164,75 +310,12 @@ void setup() {
   mm_retirement.add_item(&mi_retirement_year,  &mcb_retirement_year);
   mm_retirement.add_item(&mi_retirement_month, &mcb_retirement_month);
   mm_retirement.add_item(&mi_retirement_day,   &mcb_retirement_day);
-}
-
-// http://www.nist.gov/pml/div688/dst.cfm
-bool in_dst(){
-  // do no-math checks first for speed
-  if( tm.Month > 3 && tm.Month < 11 ){
-    return true;
-  }
-  if( tm.Month < 3 || tm.Month > 11 ){
-    return false;
-  }
-  signed int previousSunday = tm.Day - tm.Wday;
-  // DST starts at 2AM on the second Sunday of March
-  if( tm.Month == 3 ){
-    // Second Sunday would be between the 8th and 15th
-    return previousSunday >= 8;
-  }
-  // DST stops at 2AM on the first Sunday of November
-  if( tm.Month == 11 ){
-    // first Sunday will be between the between the first and the 7th.
-    return previousSunday <= 0;
-  }
-}
-
-void more_bright(){
-  if( brightness >= BrightMax ){
-    brightness = BrightMax;
-  }
-  analogWrite(PinBacklight, brightness);
-}
-
-void less_bright(){
-  if( brightness >= BrightMax ){
-    brightness = BrightMax;
-  }
-  analogWrite(PinBacklight, brightness);
-}
-
-// only update LCD if intended display != what's already displayed
-String prevline1 = "";
-String prevline2 = "";
-void update_lcd(String l1, String l2){
-  if( l1 != prevline1 ){
-    lcd.setCursor(0,0);
-    lcd.print(l1);
-    prevline1 = l1;
-  }
-  if( l2 != prevline2 ){
-    lcd.setCursor(0,1);
-    lcd.print(l2);
-    prevline2 = l2;
-  }
-}
-
-void menuLoop(){
-  return;  
+  ms.set_root_menu(&mm);
 }
 
 void loop() {
-  // if the RTC isn't working, the rest of this doesn't matter
-  if(RTC.read(tm)){
-  }
-  else{
-    update_lcd("RTC read error :/", String(millis()/1000));
-  }
-
   // check on the keys
-  lcd_key = read_LCD_buttons();
-  switch (lcd_key){
+  switch (read_LCD_buttons()){
     case btnNONE: {
       break;
     }
@@ -254,14 +337,13 @@ void loop() {
     }
   }
 
+  time_t t;
+  get_current_time(&t);
   // assemble first LCD line
-  line1 = "ADC:" + String(adc_key_in);
-  while( line1.length() < 16 ){
-    line1 = line1 + " ";
-  }
+  line1 = format_date(t);
 
   // assemble second LCD line
-  line2 = "bright:" + String(brightness);
+  line2 = format_time(t);
   while( line2.length() < 16){
     line2 = line2 + " ";
   }
