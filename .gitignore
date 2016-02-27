@@ -32,3 +32,8 @@ libraries/DS1307RTC/
 libraries/Time/
 libraries/dev/
 libraries/EEPROMEx/
+libraries/Chronos/
+libraries/Firmata/
+libraries/Rtc_by_Makuna/
+libraries/arduino-menusystem/
+
