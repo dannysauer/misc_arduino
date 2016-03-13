@@ -163,19 +163,38 @@ void update_lcd(String l1, String l2){
 time_t retire_time;
 #define ADDR_BRIGHTNESS  ADDR_RETIRE_TIME + sizeof(time_t)
 int brightness = BrightMax;
+int retire_month = 0;
+int retire_day   = 0;
+int retire_year  = 0;
 
 /*
  Menu stuff
 */
 #include <MenuSystem.h>
+class SmartMenuItem : public MenuItem {
+public:
+  SmartMenuItem(const char* name, void* (*getter)(), void* (*setter)(void*))
+  : MenuItem(name)
+  {
+    _getter = getter;
+    _setter = setter;
+  }
+  void* getter(){
+    _getter();
+  }
+  void setter(void* val){
+    _setter(val);
+  }
+protected:
+  void* (*_getter)();
+  void* (*_setter)(void*);
+};
 int exit_menu = 0;
-/*
- * Menu definitions in header file to work around silly Arduino editor
- * which moves all function prototypes to top of file - above #include. :/
- */
+
 MenuSystem ms;
 Menu mm("Configuration menu");
-MenuItem mi_backlight("Backlight Brightness");
+//MenuItem mi_backlight("Backlight Brightness");
+SmartMenuItem mi_backlight("Backlight Brightness", NULL, NULL);
 
 Menu     mm_retirement(       "Retirement Date"  );
 MenuItem mi_retirement_year(  "Retirement Year"  );
@@ -190,14 +209,91 @@ MenuItem mi_retirement_day(   "Retirement Day"   );
 */
 void mcb_backlight(MenuItem* pmi);
 void mcb_backlight(MenuItem* pmi){
-  //
-  //EEPROM.update(ADDR_BRIGHTNESS, brightness);
-  exit_menu=1;
+  int done = 0;
+  int prevbutton = btnNONE;
+  wait_for_button_release();
+  while(!done){
+    update_lcd(
+      ms.get_current_menu()->get_selected()->get_name(),
+      String(brightness)
+      );
+    switch (prevbutton = read_LCD_buttons()){
+      case btnNONE: {
+        break;
+      }
+      case btnRIGHT: {
+        more_bright();
+        break;
+      }
+      case btnLEFT: {
+        less_bright();
+        break;
+      }
+      case btnUP: // restore without saving
+      case btnDOWN: {
+        restore_bright();
+        ms.back();
+        done = 1;
+        break;
+      }
+      case btnSELECT: {
+        //save_val(pmi);
+        save_bright();
+        ms.back();
+        done = 1;
+        break;
+      }
+    }
+    if( prevbutton != btnNONE ){
+      pause(125); // ~1/8 second
+      // wait_for_button_release();
+    }
+  }
 }
 
 void mcb_retirement_year(MenuItem* pmi);
 void mcb_retirement_year(MenuItem* pmi){
-  //
+  int done = 0;
+  int prevbutton = btnNONE;
+  int prevyear = retire_year;
+  wait_for_button_release();
+  while(!done){
+    update_lcd(
+      ms.get_current_menu()->get_selected()->get_name(),
+      String(brightness)
+      );
+    switch (prevbutton = read_LCD_buttons()){
+      case btnNONE: {
+        break;
+      }
+      case btnRIGHT: {
+        more_bright();
+        break;
+      }
+      case btnLEFT: {
+        less_bright();
+        break;
+      }
+      case btnUP: // restore without saving
+      case btnDOWN: {
+        restore_bright();
+        ms.back();
+        done = 1;
+        break;
+      }
+      case btnSELECT: {
+        //save_val(pmi);
+        save_bright();
+        ms.back();
+        done = 1;
+        break;
+      }
+    }
+    if( prevbutton != btnNONE ){
+      pause(500); // ~1/2 second
+      // wait_for_button_release();
+    }
+  }
 }
 
 void mcb_retirement_month(MenuItem* pmi);
@@ -210,7 +306,55 @@ void mcb_retirement_day(MenuItem* pmi){
   //
 }
 
+void mcb_incrementer(MenuItem* pmi);
+void mcb_incrementer(MenuItem* pmi){
+  int done = 0;
+  int prevbutton = btnNONE;
+  while(!done){
+    update_lcd(
+      ms.get_current_menu()->get_selected()->get_name(),
+      ""
+      );
+    switch (prevbutton = read_LCD_buttons()){
+      case btnNONE: {
+        break;
+      }
+      case btnRIGHT: {
+        break;
+      }
+      case btnLEFT: {
+        break;
+      }
+      case btnUP: // up 'n down just leave without saving
+      case btnDOWN: {
+        //restore_val(pmi);
+        done = 1;
+        break;
+      }
+      case btnSELECT: {
+        //save_val(pmi);
+        done = 1;
+        break;
+      }
+    }
+    if( prevbutton != btnNONE ){
+      pause(125); // ~1/8 second
+      // wait_for_button_release();
+    }
+  }
+}
+
+void save_bright(){
+  EEPROM.update(ADDR_BRIGHTNESS, brightness);
+}
+
+void restore_bright(){
+  EEPROM.get(ADDR_BRIGHTNESS, brightness);
+  analogWrite(PinBacklight, brightness);
+}
+
 void more_bright(){
+  brightness += 1;
   if( brightness >= BrightMax ){
     brightness = BrightMax;
   }
@@ -218,8 +362,9 @@ void more_bright(){
 }
 
 void less_bright(){
-  if( brightness >= BrightMax ){
-    brightness = BrightMax;
+  brightness -= 1;
+  if( brightness <= BrightMin ){
+    brightness = BrightMin;
   }
   analogWrite(PinBacklight, brightness);
 }
@@ -249,10 +394,17 @@ void menuLoop(){
         break;
       }
       case btnUP: {
-        ms.back();
+        if( ! ms.back() ){
+          // in root menu; exit
+          exit_menu = 1;
+        }
         break;
       }
       case btnDOWN: {
+        if( ! ms.back() ){
+          // in root menu; exit
+          exit_menu = 1;
+        }
         break;
       }
       case btnSELECT: {
@@ -311,6 +463,11 @@ void setup() {
   mm_retirement.add_item(&mi_retirement_month, &mcb_retirement_month);
   mm_retirement.add_item(&mi_retirement_day,   &mcb_retirement_day);
   ms.set_root_menu(&mm);
+
+  /* casting pointers to integers makes me sad, but templates are ugly */
+  //mi_backlight.set_value((int)&brightness);
+  //mi_backlight.getter();
+  //mi_backlight.setter(NULL);
 }
 
 void loop() {
@@ -320,9 +477,11 @@ void loop() {
       break;
     }
     case btnRIGHT: {
+      // cycle through screens
       break;
     }
     case btnLEFT: {
+      // cycle through screens
       break;
     }
     case btnUP: {
