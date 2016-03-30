@@ -60,12 +60,18 @@ String format_date(time_t t){
        + String(day(t)  ) + "/"
        + String(year(t) );
 }
-//time_t get_current_time(time_t* t){
+
 void get_current_time(time_t* t){
   *t = now();
   *t += UTC_OFFSET; //timezone adjustment
   *t += is_dst(*t) ? 60*60 : 0; // add an hour if DST currently applies
   //return t;
+}
+time_t get_current_time(){
+  time_t t = now();
+  t += UTC_OFFSET; //timezone adjustment
+  t += is_dst(t) ? 60*60 : 0; // add an hour if DST currently applies
+  return t;
 }
 
 #include "LCDInit.h"
@@ -359,16 +365,42 @@ void update_display(){
 }
 
 #include "RetirementDisplay.h"
-RetirementDisplay* rd = new RetirementDisplay(&update_lcd);
+RetirementDisplay rd(&update_lcd);
 
-RetirementScreen* rs = new RetirementScreen(
-  []()->String{return "a";},
-  []()->String{return "b";}
-  );
+time_t t;
+RetirementScreen screen1(
+  []()->String{return "date";},
+  []()->String{
+    get_current_time(&t);
+    return( format_date(get_current_time()) );
+    }
+);
+RetirementScreen screen2(
+  []()->String{return "time";},
+  []()->String{
+    get_current_time(&t);
+    return( format_time(get_current_time()) );
+    }
+);
+RetirementScreen screen3(
+  []()->String{
+    get_current_time(&t);
+    return( format_date(get_current_time()) );
+    },
+  []()->String{
+    get_current_time(&t);
+    return( format_time(get_current_time()) );
+    }
+);
 
-//d->add(rs);
-//d.update();
-
+String time_wrapper(){
+  time_t t;
+  get_current_time(&t);
+  // assemble first LCD line
+  String s = format_time(t);
+  pad(&s);
+  return(s);
+}
 
 void setup() {
   // get saved data from EEPROM
@@ -379,6 +411,7 @@ void setup() {
   pinMode(PinBacklight, OUTPUT);
   // set up the LCD's number of columns and rows:
   lcd.begin(lcd_cols, lcd_rows);
+  //lcd.begin(16, 2);
   lcd.clear();
   analogWrite(PinBacklight, brightness);
 
@@ -408,24 +441,31 @@ void setup() {
   mm_retirement.add_item(&mi_retirement_day,   &mcb_retirement_day);
   ms.set_root_menu(&mm);
 
+  // assemble screens
+  rd.add_screen(&screen1);
+  rd.add_screen(&screen2);
+  rd.add_screen(&screen3);
+  rd.update();
+
   /* casting pointers to integers makes me sad, but templates are ugly */
   //mi_backlight.set_value((int)&brightness);
   //mi_backlight.getter();
   //mi_backlight.setter(NULL);
 }
 
+int loopbutton = btnNONE;
 void loop() {
   // check on the keys
-  switch (read_LCD_buttons()){
+  switch (loopbutton = read_LCD_buttons()){
     case btnNONE: {
       break;
     }
     case btnRIGHT: {
-      // cycle through screens
+      rd.next();
       break;
     }
     case btnLEFT: {
-      // cycle through screens
+      rd.prev();
       break;
     }
     case btnUP: {
@@ -439,5 +479,9 @@ void loop() {
       break;
     }
   }
-  update_display();
+  if( loopbutton != btnNONE ){
+    wait_for_button_release();
+  }
+  //update_display();
+  rd.update();
 }
