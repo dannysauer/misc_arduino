@@ -426,9 +426,9 @@ void setup() {
   // set up the LCD's number of columns and rows:
   lcd.begin(lcd_cols, lcd_rows);
   lcd.clear();
+  restore_bright();
   /*
    * this might be needed to crank brightness back up to max :/
-   * 
    * 
   for (int i = 0 ; i < EEPROM.length() ; i++) {
     EEPROM.write(i, 0);
