@@ -37,6 +37,26 @@ void pad( String* s ){
   }
 }
 
+String pad( String s ){
+  while( s.length() < lcd_cols ){
+    s += " ";
+  }
+  return s;
+}
+
+void center( String* s ){
+  for(int indent = ((float)lcd_cols / 2.0) - ((float)s->length() / 2.0); indent > 0; indent--){
+    *s = " " + *s;
+  }
+}
+
+String center( String s ){
+  for(int indent = ((float)lcd_cols / 2.0) - ((float)s.length() / 2.0); indent > 0; indent--){
+    s = " " + s;
+  }
+  return s;
+}
+
 // only update LCD if intended display != what's already displayed
 String prevline1 = "";
 String prevline2 = "";

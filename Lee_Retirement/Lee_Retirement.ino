@@ -80,13 +80,11 @@ time_t get_current_time(){
  EEPROM locations
 */
 #include <EEPROM.h>
+#include "RetirementTime.h"
 #define ADDR_RETIRE_TIME 0
-time_t retire_time;
-#define ADDR_BRIGHTNESS  ADDR_RETIRE_TIME + sizeof(time_t)
+RetirementTime rt(ADDR_RETIRE_TIME);
+#define ADDR_BRIGHTNESS  ADDR_RETIRE_TIME + sizeof(rt)
 int brightness = BrightMax;
-int retire_month = 0;
-int retire_day   = 0;
-int retire_year  = 0;
 
 /*
  Menu stuff
@@ -94,8 +92,8 @@ int retire_year  = 0;
 #include <MenuSystem.h>
 class SmartMenuItem : public MenuItem {
 public:
-  SmartMenuItem(const char* name, void* (*getter)(), void* (*setter)(void*))
-  : MenuItem(name)
+  SmartMenuItem(const char* name, SelectFnPtr select_fn, void* (*getter)(), void* (*setter)(void*))
+  : MenuItem(name, select_fn)
   {
     _getter = getter;
     _setter = setter;
@@ -112,15 +110,25 @@ protected:
 };
 int exit_menu = 0;
 
-MenuSystem ms;
+// I wrote a renderer already, so this is pointless.
+// Unfortunately, the library requires it... :/
+class NullRenderer : public MenuComponentRenderer{
+public:
+    void render(Menu const& menu) const {
+    }
+    void render_menu_item(MenuItem const& menu_item) const {
+    }
+    void render_back_menu_item(BackMenuItem const& menu_item) const {
+    }
+    void render_numeric_menu_item(NumericMenuItem const& menu_item) const {
+    }
+    void render_menu(Menu const& menu) const {
+    }
+};
+NullRenderer null_renderer;
+MenuSystem ms( null_renderer );
 Menu mm("Configuration menu");
-//MenuItem mi_backlight("Backlight Brightness");
-SmartMenuItem mi_backlight("Backlight Brightness", NULL, NULL);
 
-Menu     mm_retirement(       "Retirement Date"  );
-MenuItem mi_retirement_year(  "Retirement Year"  );
-MenuItem mi_retirement_month( "Retirement Month" );
-MenuItem mi_retirement_day(   "Retirement Day"   );
 
 /*
  Arduino adds prototypes for any unprototyped functions at the top of
@@ -135,7 +143,7 @@ void mcb_backlight(MenuItem* pmi){
   wait_for_button_release();
   while(!done){
     update_lcd(
-      ms.get_current_menu()->get_selected()->get_name(),
+      ms.get_current_menu()->get_current_component()->get_name(),
       String(brightness)
       );
     switch (prevbutton = read_LCD_buttons()){
@@ -176,35 +184,33 @@ void mcb_retirement_year(MenuItem* pmi);
 void mcb_retirement_year(MenuItem* pmi){
   int done = 0;
   int prevbutton = btnNONE;
-  int prevyear = retire_year;
+  int v = rt.get_month();
   wait_for_button_release();
   while(!done){
     update_lcd(
-      ms.get_current_menu()->get_selected()->get_name(),
-      String(brightness)
+      ms.get_current_menu()->get_current_component()->get_name(),
+      String(v)
       );
     switch (prevbutton = read_LCD_buttons()){
       case btnNONE: {
         break;
       }
       case btnRIGHT: {
-        more_bright();
+        v++;
         break;
       }
       case btnLEFT: {
-        less_bright();
+        v--;
         break;
       }
       case btnUP: // restore without saving
       case btnDOWN: {
-        restore_bright();
         ms.back();
         done = 1;
         break;
       }
       case btnSELECT: {
-        //save_val(pmi);
-        save_bright();
+        rt.set_month(v);
         ms.back();
         done = 1;
         break;
@@ -233,7 +239,7 @@ void mcb_incrementer(MenuItem* pmi){
   int prevbutton = btnNONE;
   while(!done){
     update_lcd(
-      ms.get_current_menu()->get_selected()->get_name(),
+      ms.get_current_menu()->get_current_component()->get_name(),
       ""
       );
     switch (prevbutton = read_LCD_buttons()){
@@ -271,6 +277,12 @@ void save_bright(){
 
 void restore_bright(){
   EEPROM.get(ADDR_BRIGHTNESS, brightness);
+  if( brightness >= BrightMax ){
+    brightness = BrightMax;
+  }
+  else if( brightness <= BrightMin ){
+    brightness = BrightMin;
+  }
   analogWrite(PinBacklight, brightness);
 }
 
@@ -300,7 +312,7 @@ void menuLoop(){
     cm = ms.get_current_menu();
     update_lcd(
       "m:" + String(cm->get_name()),
-      cm->get_selected()->get_name()
+      cm->get_current_component()->get_name()
       );
     switch (prevbutton = read_LCD_buttons()){
       case btnNONE: {
@@ -404,16 +416,39 @@ String time_wrapper(){
 
 void setup() {
   // get saved data from EEPROM
-  EEPROM.get(ADDR_RETIRE_TIME, retire_time);
-  EEPROM.get(ADDR_BRIGHTNESS,  brightness);
+  //EEPROM.get(ADDR_RETIRE_TIME, retire_time);
+  //EEPROM.get(ADDR_BRIGHTNESS,  brightness);
 
   // define PWM brightness pin for output
   pinMode(PinBacklight, OUTPUT);
+  // set brightness to stored value
+  restore_bright();
   // set up the LCD's number of columns and rows:
   lcd.begin(lcd_cols, lcd_rows);
-  //lcd.begin(16, 2);
   lcd.clear();
-  analogWrite(PinBacklight, brightness);
+  /*
+   * this might be needed to crank brightness back up to max :/
+   * 
+   * 
+  for (int i = 0 ; i < EEPROM.length() ; i++) {
+    EEPROM.write(i, 0);
+  }
+  brightness = BrightMax;
+  more_bright();
+  save_bright();
+  update_lcd("kapow", String(brightness));
+  delay(250);
+  */
+  // fade to black, then restore at the end of setup
+  while( brightness > BrightMin ){
+    less_bright();
+    update_lcd(
+      center("initializing"),
+      center(String(100*brightness / BrightMax)+"%")
+    );
+    delay(3);
+  }
+  lcd.clear();
 
   // configure clock to use RTC
   tmElements_t tm;
@@ -433,13 +468,22 @@ void setup() {
     }
   }
 
+  //MenuItem mi_backlight("Backlight Brightness");
+  SmartMenuItem mi_backlight("Backlight Brightness", &mcb_backlight, NULL, NULL);
+  
+  Menu     mm_retirement(       "Retirement Date"  );
+  MenuItem mi_retirement_year(  "Retirement Year"  , &mcb_retirement_year );
+  MenuItem mi_retirement_month( "Retirement Month" , &mcb_retirement_month);
+  MenuItem mi_retirement_day(   "Retirement Day"   , &mcb_retirement_day  );
+
   // assemble menu
-  mm.add_item(&mi_backlight, &mcb_backlight);
+  mm.add_item(&mi_backlight);
   mm.add_menu(&mm_retirement);
-  mm_retirement.add_item(&mi_retirement_year,  &mcb_retirement_year);
-  mm_retirement.add_item(&mi_retirement_month, &mcb_retirement_month);
-  mm_retirement.add_item(&mi_retirement_day,   &mcb_retirement_day);
-  ms.set_root_menu(&mm);
+  mm_retirement.add_item(&mi_retirement_year  );
+  mm_retirement.add_item(&mi_retirement_month );
+  mm_retirement.add_item(&mi_retirement_day   );
+  //ms.set_root_menu(&mm);
+  ms.get_root_menu().add_menu(&mm);
 
   // assemble screens
   rd.add_screen(&screen1);
@@ -447,10 +491,7 @@ void setup() {
   rd.add_screen(&screen3);
   rd.update();
 
-  /* casting pointers to integers makes me sad, but templates are ugly */
-  //mi_backlight.set_value((int)&brightness);
-  //mi_backlight.getter();
-  //mi_backlight.setter(NULL);
+  restore_bright();
 }
 
 int loopbutton = btnNONE;
