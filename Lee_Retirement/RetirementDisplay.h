@@ -5,6 +5,7 @@
 #define RetirementDisplay_h
 
 #include "RetirementScreen.h"
+
 class RetirementDisplay {
 protected:
   RetirementScreen* head;
