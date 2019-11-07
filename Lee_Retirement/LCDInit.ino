@@ -74,4 +74,3 @@ void update_lcd(String L1, String L2){
     prevline2 = L2;
   }
 }
-
