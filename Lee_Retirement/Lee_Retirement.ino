@@ -14,6 +14,10 @@
   http://www.pjrc.com/teensy/td_libs_Time.html
   http://www.pjrc.com/teensy/td_libs_DS1307RTC.html
  as referenced by http://playground.arduino.cc/Code/Time
+
+ Install in Arduino IDE:
+  - MenuSystem by John Black
+  - Time and DS1307RTC by M. Margolis
 */
 #include <Wire.h>
 #include <DS1307RTC.h>
@@ -380,30 +384,39 @@ void update_display(){
 RetirementDisplay rd(&update_lcd);
 
 time_t t;
-RetirementScreen screen1(
-  []()->String{return "date";},
-  []()->String{
-    get_current_time(&t);
-    return( format_date(get_current_time()) );
-    }
-);
-RetirementScreen screen2(
-  []()->String{return "time";},
-  []()->String{
-    get_current_time(&t);
-    return( format_time(get_current_time()) );
-    }
-);
-RetirementScreen screen3(
-  []()->String{
-    get_current_time(&t);
-    return( format_date(get_current_time()) );
-    },
-  []()->String{
-    get_current_time(&t);
-    return( format_time(get_current_time()) );
-    }
-);
+RetirementScreen screens[] {
+  {
+    []()->String{return "date";},
+    []()->String{
+      get_current_time(&t);
+      return( format_date(get_current_time()) );
+      }
+  },
+  {
+    []()->String{return "time";},
+    []()->String{
+      get_current_time(&t);
+      return( format_time(get_current_time()) );
+      }
+  },
+  {
+    []()->String{
+      get_current_time(&t);
+      return( format_time(get_current_time()) );
+      },
+    []()->String{return "time^";}
+  },
+  {
+    []()->String{
+      get_current_time(&t);
+      return( format_date(get_current_time()) );
+      },
+    []()->String{
+      get_current_time(&t);
+      return( format_time(get_current_time()) );
+      }
+  }
+};
 
 String time_wrapper(){
   time_t t;
@@ -486,9 +499,9 @@ void setup() {
   ms.get_root_menu().add_menu(&mm);
 
   // assemble screens
-  rd.add_screen(&screen1);
-  rd.add_screen(&screen2);
-  rd.add_screen(&screen3);
+  for (int i=0; i<sizeof(screens)/sizeof(screens[0]); i++){
+    rd.add_screen(&screens[i]);
+  }
   rd.update();
 
   restore_bright();
