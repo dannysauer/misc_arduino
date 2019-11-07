@@ -385,6 +385,7 @@ RetirementDisplay rd(&update_lcd);
 
 time_t t;
 RetirementScreen screens[] {
+  /* Arduino doesn't have std::array, but this will do */
   {
     []()->String{return "date";},
     []()->String{
@@ -398,13 +399,6 @@ RetirementScreen screens[] {
       get_current_time(&t);
       return( format_time(get_current_time()) );
       }
-  },
-  {
-    []()->String{
-      get_current_time(&t);
-      return( format_time(get_current_time()) );
-      },
-    []()->String{return "time^";}
   },
   {
     []()->String{
