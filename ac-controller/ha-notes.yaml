@@ -1,0 +1,138 @@
+# Home Assistant configuration notes for ac-controller
+# These snippets go in your HA configuration.yaml (or split files),
+# NOT in the ESPHome YAML.
+
+# ═══════════════════════════════════════════════════════════
+# 7-SEGMENT TEMPERATURE DISPLAY (OCR)
+#
+# Reads the 2-digit temperature number from camera snapshots.
+# Requires ssocr installed on your HA host:
+#   - Home Assistant OS: install via the "SSH & Web Terminal" add-on,
+#     then: apk add ssocr  (or build from source)
+#   - Docker/manual: apt install ssocr
+#
+# After mounting the XIAO, take a snapshot (http://ac-controller.local:8081)
+# and run ssocr manually to find the correct crop coordinates:
+#   ssocr -d 2 crop X Y W H threshold T <snapshot.jpg>
+# Adjust x_position, y_position, width, height, and threshold until
+# it reliably reads your display.
+# ═══════════════════════════════════════════════════════════
+image_processing:
+  - platform: seven_segments
+    source:
+      - entity_id: camera.ac_controller_ac_display_camera
+    digits: 2
+    # ↓ Calibrate these after physical mounting ↓
+    x_position: 200   # pixels from left edge of image
+    y_position: 150   # pixels from top edge of image
+    width: 200        # width of crop region in pixels
+    height: 100       # height of crop region in pixels
+    threshold: 20     # brightness difference between segment-on and background
+    # ssocr extra arguments (optional):
+    # extra_arguments: "-t 40 -d 2"
+
+
+# ═══════════════════════════════════════════════════════════
+# MODE AND FAN SPEED DETECTION
+#
+# Two options, from simplest to most accurate:
+#
+# Option A — Command tracking (simple, works when XIAO is the only controller)
+# Template sensors that mirror the last IR button pressed. Fast and reliable
+# but won't detect changes made via the physical remote or AC panel.
+# ═══════════════════════════════════════════════════════════
+input_select:
+  ac_mode_tracked:
+    name: AC Mode (tracked)
+    options: [cool, heat, fan_only, dry, auto, unknown]
+    initial: unknown
+    icon: mdi:air-conditioner
+
+  ac_fan_tracked:
+    name: AC Fan Speed (tracked)
+    options: [low, medium, high, unknown]
+    initial: unknown
+    icon: mdi:fan
+
+# Wire these to update whenever you press the ESPHome buttons:
+automation:
+  - alias: "AC track mode cool"
+    trigger:
+      platform: state
+      entity_id: button.ac_controller_ac_mode_cool
+    action:
+      service: input_select.select_option
+      target:
+        entity_id: input_select.ac_mode_tracked
+      data:
+        option: cool
+  # Repeat for heat, fan_only, dry, and each fan speed button.
+
+# ─────────────────────────────────────────────────────────
+# Option B — ROI brightness detection (accurate, reflects true display state)
+#
+# A command_line sensor that grabs a snapshot and checks the average
+# brightness of a specific pixel region where each indicator LED/icon lives.
+# Requires Python 3 with Pillow installed on the HA host.
+#
+# 1. Find pixel coordinates for each indicator by examining a snapshot.
+# 2. Adjust REGION and THRESHOLD for each sensor.
+# ─────────────────────────────────────────────────────────
+# sensor:
+#   - platform: command_line
+#     name: "AC Mode from Camera"
+#     scan_interval: 10
+#     command: >
+#       python3 -c "
+#       from urllib.request import urlopen
+#       from PIL import Image
+#       import io, json
+#       data = urlopen('http://ac-controller.local:8081/snapshot').read()
+#       img = Image.open(io.BytesIO(data)).convert('L')
+#       regions = {
+#           'cool': (50, 80, 80, 110),
+#           'heat': (50, 120, 80, 150),
+#           'fan':  (50, 160, 80, 190),
+#           'dry':  (50, 200, 80, 230),
+#       }
+#       THRESHOLD = 150
+#       active = [k for k,r in regions.items()
+#                 if sum(img.crop(r).getdata())/len(img.crop(r).getdata()) > THRESHOLD]
+#       print(active[0] if active else 'unknown')
+#       "
+#     # Calibrate: replace each (x1,y1,x2,y2) tuple with the pixel bounds
+#     # of each mode indicator on your specific AC display.
+
+
+# ═══════════════════════════════════════════════════════════
+# FRIGATE + go2rtc  (lowest priority)
+#
+# go2rtc.yaml  (usually at /config/go2rtc.yaml in HA)
+# The go2rtc add-on can be installed from the HA add-on store.
+# ═══════════════════════════════════════════════════════════
+#
+# streams:
+#   ac_display:
+#     - ffmpeg:http://ac-controller.local:8080#video=h264
+#
+# ─────────────────────────────────────────────────────────
+# frigate.yml camera entry:
+# ─────────────────────────────────────────────────────────
+#
+# cameras:
+#   ac_display:
+#     ffmpeg:
+#       inputs:
+#         - path: rtsp://127.0.0.1:8554/ac_display
+#           input_args: preset-rtsp-generic
+#           roles:
+#             - detect
+#             - record
+#     detect:
+#       width: 800
+#       height: 600
+#       fps: 5
+#     snapshots:
+#       enabled: true
+#     motion:
+#       enabled: false   # Static display; disable to avoid noise

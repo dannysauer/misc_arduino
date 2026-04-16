@@ -36,3 +36,5 @@ libraries/Chronos/
 libraries/Firmata/
 libraries/Rtc_by_Makuna/
 
+# ESPHome secrets (never commit real credentials)
+ac-controller/secrets.yaml
