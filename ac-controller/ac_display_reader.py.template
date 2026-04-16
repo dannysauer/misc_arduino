@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""
+AC Display Reader
+─────────────────
+Downloads one snapshot from the ESPHome camera and detects:
+  - 7-segment temperature display (via ssocr)
+  - Mode LEDs: cool, heat, fan_only, dry, auto
+  - Fan speed LEDs: low, medium, high
+  - Filter change LED
+
+Output is JSON on stdout; Home Assistant command_line sensor reads it.
+
+INSTALLATION
+────────────
+1. Copy this file to /config/scripts/ac_display_reader.py
+2. Install dependencies on your HA host:
+     apk add py3-pillow ssocr      (HA OS via SSH add-on)
+     pip install Pillow             (Docker / manual installs)
+     apt install ssocr              (Debian/Ubuntu)
+3. Mount the XIAO and take a reference snapshot:
+     curl -o /tmp/ac_snapshot.jpg http://ac-controller.local:8081/snapshot
+4. Open the snapshot in any image editor that shows pixel coordinates
+   (GIMP: pointer tool; Photoshop: info panel; even browser DevTools work)
+5. For each LED indicator, find the pixel bounding box of the lit area
+   and enter it in LED_REGIONS below as (x1, y1, x2, y2)
+6. For the 7-segment display, find the bounding box of the digit area
+   and enter it in TEMP_REGION
+7. Run the script manually to verify: python3 ac_display_reader.py
+8. Tune THRESHOLD until detection is reliable across all lighting conditions
+
+THRESHOLD TUNING
+────────────────
+Run with --debug to see the average brightness of each region:
+  python3 ac_display_reader.py --debug
+
+  - LED ON  typically gives average brightness 180–255 (bright colored LED)
+  - LED OFF typically gives average brightness 20–80  (dark background)
+  - Set THRESHOLD somewhere in between, e.g. 120–150
+  - If detection is flaky, try adjusting contrast/brightness in ac-controller.yaml
+  - AC units with small LEDs: shrink the ROI box to just the LED itself
+
+COLORSPACE NOTE
+────────────────
+Colored LEDs (e.g. blue for cool, red for heat) convert to gray with different
+brightnesses. If two mode LEDs look the same brightness in grayscale, switch
+to RGB mode: set USE_COLOR = True and tune separate R/G/B thresholds per LED.
+"""
+
+import sys
+import json
+import io
+import subprocess
+import tempfile
+import os
+from urllib.request import urlopen, Request
+from urllib.error import URLError
+
+# ─────────────────────────────────────────────────────────────
+# CONFIGURATION — edit these after mounting and taking a snapshot
+# ─────────────────────────────────────────────────────────────
+
+CAMERA_SNAPSHOT_URL = "http://ac-controller.local:8081/snapshot"
+CAMERA_TIMEOUT_SEC  = 5
+
+# Path to ssocr binary. Set to None to skip temperature reading
+# (the image_processing.seven_segments HA integration can handle it instead).
+SSOCR_PATH = "ssocr"
+
+# Brightness threshold: region average above this → LED is ON.
+# Tune with --debug after mounting. Typical range: 100–180.
+THRESHOLD = 130
+
+# Set to True to convert to grayscale for detection (works for most setups).
+# Set to False to keep RGB and use per-channel thresholds (see USE_COLOR below).
+USE_GRAYSCALE = True
+
+# ── 7-SEGMENT TEMPERATURE DISPLAY ─────────────────────────────
+# Pixel crop for the digit area passed to ssocr.
+# Format: (x, y, width, height) — top-left corner + size.
+# All zeros = disabled (skip temperature reading).
+TEMP_CROP = (0, 0, 0, 0)   # TODO: calibrate  e.g. (180, 60, 120, 70)
+
+# ssocr options. -d 2 = expect 2 digits.  Adjust threshold (-t) if needed.
+SSOCR_ARGS = ["-d", "2", "-t", "40"]
+
+# ── LED REGIONS ───────────────────────────────────────────────
+# Format: { 'key': (x1, y1, x2, y2), ... }
+# Coordinates are pixel positions in the full 800×600 image.
+# Each box should tightly enclose one LED indicator.
+# All zeros = disabled (that LED won't be reported).
+LED_REGIONS = {
+    # Mode indicators — one group, mutually exclusive
+    "mode_cool":    (0, 0, 0, 0),   # TODO: calibrate  e.g. (30, 80, 55, 105)
+    "mode_heat":    (0, 0, 0, 0),   # TODO
+    "mode_fan_only":(0, 0, 0, 0),   # TODO
+    "mode_dry":     (0, 0, 0, 0),   # TODO
+    "mode_auto":    (0, 0, 0, 0),   # TODO  (omit if your unit has no Auto mode)
+
+    # Fan speed indicators — one group, mutually exclusive
+    "fan_low":      (0, 0, 0, 0),   # TODO
+    "fan_medium":   (0, 0, 0, 0),   # TODO
+    "fan_high":     (0, 0, 0, 0),   # TODO
+
+    # Filter change indicator
+    "filter_change":(0, 0, 0, 0),   # TODO
+}
+
+# ─────────────────────────────────────────────────────────────
+# END OF CONFIGURATION
+# ─────────────────────────────────────────────────────────────
+
+
+def fetch_snapshot():
+    req = Request(CAMERA_SNAPSHOT_URL, headers={"User-Agent": "ac-display-reader/1.0"})
+    with urlopen(req, timeout=CAMERA_TIMEOUT_SEC) as resp:
+        return resp.read()
+
+
+def region_is_active(img, x1, y1, x2, y2):
+    """Return True if the average brightness of the region exceeds THRESHOLD."""
+    if (x1, y1, x2, y2) == (0, 0, 0, 0):
+        return None   # unconfigured — don't report
+    crop = img.crop((x1, y1, x2, y2))
+    pixels = list(crop.getdata())
+    if not pixels:
+        return None
+    avg = sum(pixels) / len(pixels)
+    return avg > THRESHOLD
+
+
+def read_temperature(image_bytes):
+    """Run ssocr on the temperature region. Returns string or None."""
+    if SSOCR_PATH is None:
+        return None
+    x, y, w, h = TEMP_CROP
+    if (x, y, w, h) == (0, 0, 0, 0):
+        return None
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+        f.write(image_bytes)
+        tmp = f.name
+    try:
+        cmd = [SSOCR_PATH] + SSOCR_ARGS + ["crop", str(x), str(y), str(w), str(h), tmp]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        val = result.stdout.strip()
+        return val if val else None
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    finally:
+        os.unlink(tmp)
+
+
+def main():
+    debug = "--debug" in sys.argv
+
+    try:
+        image_bytes = fetch_snapshot()
+    except URLError as e:
+        # Camera unreachable — output nulls so HA doesn't error
+        out = {"temperature": None}
+        out.update({k: None for k in LED_REGIONS})
+        print(json.dumps(out))
+        return
+
+    try:
+        from PIL import Image
+    except ImportError:
+        sys.stderr.write("Pillow not installed. Run: apk add py3-pillow\n")
+        sys.exit(1)
+
+    img = Image.open(io.BytesIO(image_bytes))
+    if USE_GRAYSCALE:
+        img_detect = img.convert("L")
+    else:
+        img_detect = img  # keep RGB; region_is_active will average all channels
+
+    temperature = read_temperature(image_bytes)
+
+    results = {"temperature": temperature}
+
+    for key, (x1, y1, x2, y2) in LED_REGIONS.items():
+        state = region_is_active(img_detect, x1, y1, x2, y2)
+        results[key] = state
+
+        if debug:
+            if (x1, y1, x2, y2) != (0, 0, 0, 0):
+                crop = img_detect.crop((x1, y1, x2, y2))
+                pixels = list(crop.getdata())
+                avg = sum(pixels) / len(pixels) if pixels else 0
+                sys.stderr.write(f"  {key:20s}  avg={avg:6.1f}  {'ON ' if state else 'off'}\n")
+            else:
+                sys.stderr.write(f"  {key:20s}  (not configured)\n")
+
+    if debug:
+        sys.stderr.write(f"  {'temperature':20s}  {temperature!r}\n")
+
+    print(json.dumps(results))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,123 +1,167 @@
-# Home Assistant configuration notes for ac-controller
-# These snippets go in your HA configuration.yaml (or split files),
-# NOT in the ESPHome YAML.
-
-# ═══════════════════════════════════════════════════════════
-# 7-SEGMENT TEMPERATURE DISPLAY (OCR)
+# Home Assistant configuration for ac-controller
+# These snippets go in HA config files, not in the ESPHome YAML.
 #
-# Reads the 2-digit temperature number from camera snapshots.
-# Requires ssocr installed on your HA host:
-#   - Home Assistant OS: install via the "SSH & Web Terminal" add-on,
-#     then: apk add ssocr  (or build from source)
-#   - Docker/manual: apt install ssocr
+# STATE READING PHILOSOPHY
+# ─────────────────────────────────────────────────────────────
+# The XIAO camera is the source of truth for AC state. The AC can
+# be controlled by the physical remote, wall buttons, or this ESPHome
+# device — so ESPHome's IR buttons are write-only. All state is read
+# from the camera via ac_display_reader.py (see that file).
 #
-# After mounting the XIAO, take a snapshot (http://ac-controller.local:8081)
-# and run ssocr manually to find the correct crop coordinates:
-#   ssocr -d 2 crop X Y W H threshold T <snapshot.jpg>
-# Adjust x_position, y_position, width, height, and threshold until
-# it reliably reads your display.
-# ═══════════════════════════════════════════════════════════
-image_processing:
-  - platform: seven_segments
-    source:
-      - entity_id: camera.ac_controller_ac_display_camera
-    digits: 2
-    # ↓ Calibrate these after physical mounting ↓
-    x_position: 200   # pixels from left edge of image
-    y_position: 150   # pixels from top edge of image
-    width: 200        # width of crop region in pixels
-    height: 100       # height of crop region in pixels
-    threshold: 20     # brightness difference between segment-on and background
-    # ssocr extra arguments (optional):
-    # extra_arguments: "-t 40 -d 2"
+# Z-WAVE OUTLET
+# ─────────────────────────────────────────────────────────────
+# A Z-wave smart outlet already in HA controls power and reports
+# power consumption. When it reports ~0W, the AC is off and all
+# LED sensors should be treated as unknown/off regardless of what
+# the camera sees. Wire this in via the template sensors below.
 
 
 # ═══════════════════════════════════════════════════════════
-# MODE AND FAN SPEED DETECTION
+# DISPLAY READING — command_line sensor driving everything
 #
-# Two options, from simplest to most accurate:
+# The ac_display_reader.py script (see that file) downloads one
+# snapshot and returns all states as JSON in a single pass:
+#   temperature, mode LEDs, fan LEDs, filter LED.
 #
-# Option A — Command tracking (simple, works when XIAO is the only controller)
-# Template sensors that mirror the last IR button pressed. Fast and reliable
-# but won't detect changes made via the physical remote or AC panel.
+# Requires on the HA host:
+#   - Python 3 with Pillow:  apk add py3-pillow   (HA OS via SSH add-on)
+#                        or:  pip install Pillow    (manual/Docker installs)
+#   - ssocr for 7-segment:   apk add ssocr
+#     (if ssocr unavailable, set SSOCR_PATH=None in the script to skip
+#      temperature and use only image_processing.seven_segments instead)
+#
+# Copy ac_display_reader.py.template to /config/scripts/ac_display_reader.py
+# and calibrate the ROI coordinates before enabling.
 # ═══════════════════════════════════════════════════════════
-input_select:
-  ac_mode_tracked:
-    name: AC Mode (tracked)
-    options: [cool, heat, fan_only, dry, auto, unknown]
-    initial: unknown
-    icon: mdi:air-conditioner
-
-  ac_fan_tracked:
-    name: AC Fan Speed (tracked)
-    options: [low, medium, high, unknown]
-    initial: unknown
-    icon: mdi:fan
-
-# Wire these to update whenever you press the ESPHome buttons:
-automation:
-  - alias: "AC track mode cool"
-    trigger:
-      platform: state
-      entity_id: button.ac_controller_ac_mode_cool
-    action:
-      service: input_select.select_option
-      target:
-        entity_id: input_select.ac_mode_tracked
-      data:
-        option: cool
-  # Repeat for heat, fan_only, dry, and each fan speed button.
-
-# ─────────────────────────────────────────────────────────
-# Option B — ROI brightness detection (accurate, reflects true display state)
-#
-# A command_line sensor that grabs a snapshot and checks the average
-# brightness of a specific pixel region where each indicator LED/icon lives.
-# Requires Python 3 with Pillow installed on the HA host.
-#
-# 1. Find pixel coordinates for each indicator by examining a snapshot.
-# 2. Adjust REGION and THRESHOLD for each sensor.
-# ─────────────────────────────────────────────────────────
-# sensor:
-#   - platform: command_line
-#     name: "AC Mode from Camera"
-#     scan_interval: 10
-#     command: >
-#       python3 -c "
-#       from urllib.request import urlopen
-#       from PIL import Image
-#       import io, json
-#       data = urlopen('http://ac-controller.local:8081/snapshot').read()
-#       img = Image.open(io.BytesIO(data)).convert('L')
-#       regions = {
-#           'cool': (50, 80, 80, 110),
-#           'heat': (50, 120, 80, 150),
-#           'fan':  (50, 160, 80, 190),
-#           'dry':  (50, 200, 80, 230),
-#       }
-#       THRESHOLD = 150
-#       active = [k for k,r in regions.items()
-#                 if sum(img.crop(r).getdata())/len(img.crop(r).getdata()) > THRESHOLD]
-#       print(active[0] if active else 'unknown')
-#       "
-#     # Calibrate: replace each (x1,y1,x2,y2) tuple with the pixel bounds
-#     # of each mode indicator on your specific AC display.
+sensor:
+  - platform: command_line
+    name: "AC Display State"
+    unique_id: ac_display_state
+    # Adjust path if your HA scripts directory differs
+    command: "python3 /config/scripts/ac_display_reader.py"
+    scan_interval: 5   # seconds; increase if CPU load is a concern
+    value_template: "{{ value_json.temperature | default('unknown') }}"
+    json_attributes:
+      - temperature
+      - mode_cool
+      - mode_heat
+      - mode_fan_only
+      - mode_dry
+      - mode_auto
+      - fan_low
+      - fan_medium
+      - fan_high
+      - filter_change
+    availability_template: >
+      {{ states('switch.ac_outlet') != 'unavailable' }}
 
 
 # ═══════════════════════════════════════════════════════════
-# FRIGATE + go2rtc  (lowest priority)
+# TEMPLATE SENSORS — parsed from the JSON above
 #
-# go2rtc.yaml  (usually at /config/go2rtc.yaml in HA)
-# The go2rtc add-on can be installed from the HA add-on store.
+# The Z-wave outlet entity is assumed to be switch.ac_outlet and
+# sensor.ac_outlet_power (adjust to match your actual entity IDs).
+# When the outlet reports low power, the AC is off and all indicator
+# states are forced to false.
+# ═══════════════════════════════════════════════════════════
+template:
+  - sensor:
+      - name: "AC Temperature Display"
+        unique_id: ac_temperature_display
+        unit_of_measurement: "°"
+        state_class: measurement
+        icon: mdi:thermometer
+        state: >
+          {% if states('sensor.ac_outlet_power') | float(0) < 5 %}
+            unknown
+          {% else %}
+            {{ state_attr('sensor.ac_display_state', 'temperature') | default('unknown') }}
+          {% endif %}
+
+      - name: "AC Current Mode"
+        unique_id: ac_current_mode
+        icon: mdi:air-conditioner
+        state: >
+          {% if states('sensor.ac_outlet_power') | float(0) < 5 %}
+            off
+          {% elif state_attr('sensor.ac_display_state', 'mode_cool') %}
+            cool
+          {% elif state_attr('sensor.ac_display_state', 'mode_heat') %}
+            heat
+          {% elif state_attr('sensor.ac_display_state', 'mode_fan_only') %}
+            fan_only
+          {% elif state_attr('sensor.ac_display_state', 'mode_dry') %}
+            dry
+          {% elif state_attr('sensor.ac_display_state', 'mode_auto') %}
+            auto
+          {% else %}
+            unknown
+          {% endif %}
+
+      - name: "AC Fan Speed"
+        unique_id: ac_fan_speed
+        icon: mdi:fan
+        state: >
+          {% if states('sensor.ac_outlet_power') | float(0) < 5 %}
+            off
+          {% elif state_attr('sensor.ac_display_state', 'fan_high') %}
+            high
+          {% elif state_attr('sensor.ac_display_state', 'fan_medium') %}
+            medium
+          {% elif state_attr('sensor.ac_display_state', 'fan_low') %}
+            low
+          {% else %}
+            unknown
+          {% endif %}
+
+  - binary_sensor:
+      - name: "AC Filter Change"
+        unique_id: ac_filter_change
+        device_class: problem
+        icon: mdi:air-filter
+        state: >
+          {{ state_attr('sensor.ac_display_state', 'filter_change') | default(false) }}
+
+      # Individual mode LEDs (useful for dashboards / automations)
+      - name: "AC Mode Cool LED"
+        unique_id: ac_mode_cool_led
+        state: "{{ state_attr('sensor.ac_display_state', 'mode_cool') | default(false) }}"
+      - name: "AC Mode Heat LED"
+        unique_id: ac_mode_heat_led
+        state: "{{ state_attr('sensor.ac_display_state', 'mode_heat') | default(false) }}"
+      - name: "AC Mode Fan Only LED"
+        unique_id: ac_mode_fan_only_led
+        state: "{{ state_attr('sensor.ac_display_state', 'mode_fan_only') | default(false) }}"
+      - name: "AC Mode Dry LED"
+        unique_id: ac_mode_dry_led
+        state: "{{ state_attr('sensor.ac_display_state', 'mode_dry') | default(false) }}"
+      - name: "AC Mode Auto LED"
+        unique_id: ac_mode_auto_led
+        state: "{{ state_attr('sensor.ac_display_state', 'mode_auto') | default(false) }}"
+
+      # Individual fan LEDs
+      - name: "AC Fan Low LED"
+        unique_id: ac_fan_low_led
+        state: "{{ state_attr('sensor.ac_display_state', 'fan_low') | default(false) }}"
+      - name: "AC Fan Medium LED"
+        unique_id: ac_fan_medium_led
+        state: "{{ state_attr('sensor.ac_display_state', 'fan_medium') | default(false) }}"
+      - name: "AC Fan High LED"
+        unique_id: ac_fan_high_led
+        state: "{{ state_attr('sensor.ac_display_state', 'fan_high') | default(false) }}"
+
+
+# ═══════════════════════════════════════════════════════════
+# FRIGATE + go2rtc  (lowest priority — add after everything else works)
+#
+# go2rtc.yaml  (usually /config/go2rtc.yaml)
 # ═══════════════════════════════════════════════════════════
 #
 # streams:
 #   ac_display:
 #     - ffmpeg:http://ac-controller.local:8080#video=h264
 #
-# ─────────────────────────────────────────────────────────
-# frigate.yml camera entry:
-# ─────────────────────────────────────────────────────────
+# frigate.yml:
 #
 # cameras:
 #   ac_display:
@@ -125,9 +169,7 @@ automation:
 #       inputs:
 #         - path: rtsp://127.0.0.1:8554/ac_display
 #           input_args: preset-rtsp-generic
-#           roles:
-#             - detect
-#             - record
+#           roles: [detect, record]
 #     detect:
 #       width: 800
 #       height: 600
@@ -135,4 +177,4 @@ automation:
 #     snapshots:
 #       enabled: true
 #     motion:
-#       enabled: false   # Static display; disable to avoid noise
+#       enabled: false
