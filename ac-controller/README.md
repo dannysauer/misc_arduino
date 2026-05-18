@@ -44,6 +44,8 @@ supply via 10–33 Ω resistor.
 | `secrets.yaml.template` | Copy to `secrets.yaml`, fill in credentials |
 | `ha-notes.yaml` | Home Assistant config snippets (sensors, templates) |
 | `ac_display_reader.py.template` | Copy to HA, calibrate ROIs, reads display state |
+| `agents.md` | Context and hints for future AI agents working on this project |
+| `enclosure/` | 3D-printable adjustable mount — see [enclosure/specs.md](enclosure/specs.md) |
 
 `secrets.yaml` is gitignored.
 
