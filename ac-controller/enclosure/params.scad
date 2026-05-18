@@ -95,7 +95,7 @@ clamp_nut_h   = 3.2;   // M4 nut height (for nut-trap pocket)
 // ── BOX JOIN SCREWS (M3, one per long side) ──────────────────
 join_d    = 2.7;   // M3 clearance hole
 join_boss = 5.5;   // boss OD
-join_y    = ci_l / 4;  // Y position of bosses from center (±)
+join_y    = ci_l / 2 - join_boss / 2 - 1.0;  // Y position of bosses — near corners, clears VS1838B slot
 
 // ── ANTENNA CABLE GROOVE (on −Z face of lower half) ──────────
 ant_w     = 4.0;   // groove width
