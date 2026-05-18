@@ -9,7 +9,7 @@ ball-and-socket adjustable mount for pointing at an AC display panel.
 |---|---|---|
 | `base.scad` | T-shaped wall bracket with ball | ~2 h |
 | `box_lower.scad` | Lower enclosure half + ball clamp | ~1.5 h |
-| `box_upper.scad` | Upper enclosure half (lid) + camera hole | ~1 h |
+| `box_upper.scad` | Upper enclosure half (lid) + camera hole + IR emitter hole + IR receiver slot | ~1 h |
 | `dust_cap.scad` | Press-fit back cover | ~20 min |
 
 ## Print Settings (PETG)
@@ -49,6 +49,16 @@ values inside part files.
 | `clamp_screw_d` | 4.5 mm | M4 clearance hole (use 3.7 for M3) |
 | `mount_d` | 4.5 mm | Spax #8 shank clearance hole |
 | `mount_dx` | 30.0 mm | Half-spacing between mounting holes (60 mm c-c) |
+| `ir_led_d` | 5.0 mm | IR emitter package diameter — **T-5 = 5.0, T-1 = 3.0** |
+| `ir_led_cl` | 0.2 mm | LED hole clearance (snug; dome flange retains it) |
+| `ir_led_xoff` | auto | X offset of emitter hole from center (left of camera) |
+| `ir_led_yoff` | cam_hole_yoff | Y position of emitter (same row as camera) |
+| `vs1838_w` | 5.8 mm | VS1838B body width |
+| `vs1838_h` | 7.4 mm | VS1838B body height |
+| `vs1838_d` | 3.0 mm | VS1838B body depth (slightly > wall; ~0.5 mm protrudes inside) |
+| `vs1838_cl` | 0.3 mm | Per-side slot clearance |
+| `vs1838_yoff` | 0 mm | Receiver slot Y center (0 = centered on box) |
+| `vs1838_zoff` | box_h_top/2 | Receiver slot Z center in upper half |
 
 ## Hardware BOM
 
@@ -58,6 +68,9 @@ values inside part files.
 | 1 | M4 × 20 mm button-head or socket-head screw | Ball clamp |
 | 1 | M4 hex nut | Captured in nut-trap pocket on clamp ear |
 | 2 | M3 × 12 mm socket-head screws | Join upper + lower box halves |
+| 1 | IR LED emitter, T-5 (5 mm) 940 nm | In top-face hole; LED from your kit |
+| 1 | VS1838B IR receiver module | In +X side-wall slot; receiver from your kit |
+| — | Short hookup wire (~50 mm leads) | Emitter → GPIO4; receiver → GPIO3 (see firmware) |
 | 4 | M3 hex nut | Captured in bosses inside lower half |
 
 ## Coordinate System (box halves)

@@ -73,6 +73,28 @@ module box_upper() {
         translate([cam_hole_xoff, cam_hole_yoff, box_h_top - 0.5])
             cylinder(h=1.0, d1=cam_hole_d, d2=cam_hole_d + 2.0);
 
+        // ── IR emitter hole (T-5 LED, top +Z face, left of camera) ───
+        // LED sits dome-up; dome flange (~5.5 mm) rests on outer surface.
+        // On short wire — insert from outside, route inside to XIAO GPIO4.
+        translate([ir_led_xoff, ir_led_yoff, box_h_top - 0.1])
+            cylinder(h=wall + 0.2, d=ir_led_d + 2*ir_led_cl);
+        // Lead-in chamfer (outside) eases LED insertion
+        translate([ir_led_xoff, ir_led_yoff, box_h_top - 0.6])
+            cylinder(h=0.7, d1=ir_led_d + 2*ir_led_cl,
+                            d2=ir_led_d + 2*ir_led_cl + 1.6);
+
+        // ── VS1838B receiver slot (+X side wall) ──────────────────
+        // Flat receiver window faces +X (outward); insert from outside.
+        // Leads connect via short wire to XIAO GPIO3 inside cavity.
+        // Body depth (3 mm) slightly exceeds wall (2.5 mm); ~0.5 mm
+        // protrudes into the cavity — wires have enough slack.
+        vs_sw = vs1838_w + 2*vs1838_cl;   // slot width  (Y)
+        vs_sh = vs1838_h + 2*vs1838_cl;   // slot height (Z)
+        translate([box_w/2 - wall - 0.1,
+                   vs1838_yoff - vs_sw/2,
+                   vs1838_zoff - vs_sh/2])
+            cube([wall + 0.2, vs_sw, vs_sh]);
+
         // ── USB-C opening continues into upper half (+Y face) ──
         usb_z_center = -(ci_h_bot - comp_bot - pcb_t/2) + usb_z_off;
         translate([-usb_cut_w/2, box_l/2 - 0.1, usb_z_center - usb_cut_h/2])

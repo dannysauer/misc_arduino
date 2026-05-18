@@ -37,6 +37,24 @@ cam_hole_d  = 9.0;   // lens aperture; OV2640 lens ~7 mm, extra for cable routin
 cam_hole_xoff = 0;   // offset from box centerline (X); 0 = centered
 cam_hole_yoff = 1.5; // offset toward USB end (adjust after test print)
 
+// ── IR EMITTER (T-5 through-hole LED, top face alongside camera) ─
+// Change ir_led_d to 3.0 for T-1 (3 mm) package.
+ir_led_d    = 5.0;   // LED body/dome diameter mm (T-5 = 5.0, T-1 = 3.0)
+ir_led_cl   = 0.2;   // per-side clearance — snug friction fit; dome lip retains LED
+// Placed left of camera on the same Y row (adjustable via ir_led_xoff)
+ir_led_xoff = -(cam_hole_d/2 + ir_led_d/2 + 2.0);
+ir_led_yoff = cam_hole_yoff;
+
+// ── IR RECEIVER (VS1838B, +X side wall of upper half) ────────────
+// Package: flat front window 5.8 mm wide × 7.4 mm tall × 3.0 mm deep.
+// Receiver window faces outward (+X); leads/wire run into cavity to XIAO.
+vs1838_w  = 5.8;   // body width  (Y direction in slot)
+vs1838_h  = 7.4;   // body height (Z direction in slot)
+vs1838_d  = 3.0;   // body depth  (through wall; protrudes ~0.5 mm into cavity)
+vs1838_cl = 0.3;   // per-side slot clearance
+vs1838_yoff = 0;           // slot center Y (0 = box center; no conflict with M3 at ±join_y)
+vs1838_zoff = box_h_top/2; // slot center Z in upper half
+
 // ── USB OPENING (in +Y face, centered on board edge) ─────────
 usb_cut_w = usb_w + 1.0;  // clearance for plug
 usb_cut_h = usb_h + 1.0;
