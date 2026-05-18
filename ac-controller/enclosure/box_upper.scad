@@ -88,11 +88,13 @@ module box_upper() {
         // Leads connect via short wire to XIAO GPIO3 inside cavity.
         // Body depth (3 mm) slightly exceeds wall (2.5 mm); ~0.5 mm
         // protrudes into the cavity — wires have enough slack.
-        vs_sw = vs1838_w + 2*vs1838_cl;   // slot width  (Y)
-        vs_sh = vs1838_h + 2*vs1838_cl;   // slot height (Z)
-        translate([box_w/2 - wall - 0.1,
-                   vs1838_yoff - vs_sw/2,
-                   vs1838_zoff - vs_sh/2])
+        vs_sw  = vs1838_w + 2*vs1838_cl;   // slot width  (Y)
+        vs_sh  = vs1838_h + 2*vs1838_cl;   // slot height (Z)
+        // Anchor cube at outer face of chosen wall; cube always extends +X.
+        // side=1 (+X): start at inner face, cut outward.
+        // side=-1 (−X): start just outside outer face, cut inward.
+        vs_x0  = (vs1838_side > 0) ? (box_w/2 - wall - 0.1) : (-box_w/2 - 0.1);
+        translate([vs_x0, vs1838_yoff - vs_sw/2, vs1838_zoff - vs_sh/2])
             cube([wall + 0.2, vs_sw, vs_sh]);
 
         // ── USB-C opening continues into upper half (+Y face) ──

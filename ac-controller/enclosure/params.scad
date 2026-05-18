@@ -54,6 +54,7 @@ vs1838_d  = 3.0;   // body depth  (through wall; protrudes ~0.5 mm into cavity)
 vs1838_cl = 0.3;   // per-side slot clearance
 vs1838_yoff = 0;           // slot center Y (0 = box center; no conflict with M3 at ±join_y)
 vs1838_zoff = box_h_top/2; // slot center Z in upper half
+vs1838_side = 1;           // which X wall: 1 = +X (right), -1 = -X (left)
 
 // ── USB OPENING (in +Y face, centered on board edge) ─────────
 usb_cut_w = usb_w + 1.0;  // clearance for plug

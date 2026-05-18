@@ -59,6 +59,7 @@ values inside part files.
 | `vs1838_cl` | 0.3 mm | Per-side slot clearance |
 | `vs1838_yoff` | 0 mm | Receiver slot Y center (0 = centered on box) |
 | `vs1838_zoff` | box_h_top/2 | Receiver slot Z center in upper half |
+| `vs1838_side` | 1 | Wall side: `1` = +X (right), `-1` = −X (left) |
 
 ## Hardware BOM
 
