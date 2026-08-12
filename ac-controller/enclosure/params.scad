@@ -1,119 +1,147 @@
-// params.scad — shared parameters for XIAO ESP32S3 Sense enclosure
-// All dimensions in millimeters. Include this file in every part.
-// See specs.md for rationale and modification guidance.
+// params.scad — shared parameters for XIAO ESP32S3 Sense camera mount
+// All dimensions in millimetres. Include this file in every part.
+// See specs.md for rationale, print settings, and modification guidance.
+//
+// ── COORDINATE SYSTEM (box parts) ───────────────────────────────
+//   Origin = centre of the box at the split plane between the halves.
+//   +Z = the direction the camera looks ("front" of the mount)
+//   +Y = USB-C end
+//   −X = accessory bay (IR emitter + IR receiver + wiring)
+//   The board's top surface sits board_drop below the split plane, so
+//   the lid can press down on it.
 
 // ── BOARD: Seeed Studio XIAO ESP32S3 Sense ─────────────────────
 // https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/
-// Main PCB: 21.0 × 17.5 mm; Sense expansion board clips to back,
-// adding ~3 mm. Camera module on flex cable sits above PCB.
-board_w    = 21.0;   // PCB width  (X in box coords)
-board_l    = 18.0;   // PCB length (Y in box coords; 17.5 rounded up)
-pcb_t      =  1.6;   // PCB thickness
-comp_top   =  4.0;   // max component height above PCB (tallest cap)
-comp_bot   =  3.5;   // total expansion board + bottom component height
-cam_rise   =  5.5;   // camera module height above top components
-// USB-C receptacle (centered on the +Y edge of the board)
-usb_w      =  9.5;   // USB-C opening width
-usb_h      =  3.8;   // USB-C opening height
-usb_z_off  =  1.8;   // USB-C center height above PCB bottom face
+// The Sense expansion board clips underneath the main PCB; treat the
+// pair as one stacked block. Camera module folds over the PCB top.
+board_w    = 21.0;  // PCB width  (X)
+board_l    = 17.5;  // PCB length (Y)
+stack_h    =  6.0;  // expansion-board underside → main-PCB top surface
+cam_h      =  9.0;  // camera module top (lens barrel) above main-PCB top
+cam_cl     =  0.5;  // air gap above lens barrel
+cl         =  0.35; // per-side clearance around the board
+pad_h      =  1.5;  // corner pads lift the stack off the cavity floor
+board_drop =  1.0;  // board top surface below the split plane
 
-// ── BOX ────────────────────────────────────────────────────────
-wall       = 2.5;    // wall thickness (PETG min ~2 mm; 2.5 for rigidity)
-cl         = 0.35;   // per-side clearance for board fit
-// Interior cavity
-ci_w  = board_w + 2*cl;
-ci_l  = board_l + 2*cl;
-// Split line at midpoint of PCB thickness (Z=0 in box coords)
-ci_h_bot = comp_bot + pcb_t/2 + cl;  // below split
-ci_h_top = pcb_t/2 + comp_top + cam_rise + cl;  // above split
-// Outer box
-box_w = ci_w + 2*wall;
-box_l = ci_l + 2*wall;
-box_h_bot = ci_h_bot + wall;   // height of lower half
-box_h_top = ci_h_top + wall;   // height of upper half
+// USB-C receptacle: sits on the PCB top surface, centred on the +Y edge
+usb_w      =  9.5;
+usb_h      =  3.2;
 
-// ── CAMERA HOLE (in top face of upper half) ──────────────────
-cam_hole_d  = 9.0;   // lens aperture; OV2640 lens ~7 mm, extra for cable routing
-cam_hole_xoff = 0;   // offset from box centerline (X); 0 = centered
-cam_hole_yoff = 1.5; // offset toward USB end (adjust after test print)
+// ── ACCESSORY BAY ──────────────────────────────────────────────
+// Extra cavity width on −X that houses the IR emitter, IR receiver and
+// their wiring. Without it there is nowhere to put an LED hole that is
+// not blocked by a wall — the board fills the rest of the footprint.
+bay_w      =  8.0;  // bay width (X)
+extra_l    =  4.0;  // extra cavity length (Y) for wire routing + lid lip
+margin_r   =  5.5;  // +X margin reserved for the lid screw bosses
 
-// ── IR EMITTER (T-5 through-hole LED, top face alongside camera) ─
-// Change ir_led_d to 3.0 for T-1 (3 mm) package.
-ir_led_d    = 5.0;   // LED body/dome diameter mm (T-5 = 5.0, T-1 = 3.0)
-ir_led_cl   = 0.2;   // per-side clearance — snug friction fit; dome lip retains LED
-// Placed left of camera on the same Y row (adjustable via ir_led_xoff)
-ir_led_xoff = -(cam_hole_d/2 + ir_led_d/2 + 2.0);
-ir_led_yoff = cam_hole_yoff;
+// ── CAVITY ─────────────────────────────────────────────────────
+ci_w = board_w + 2*cl + bay_w + margin_r;   // 35.2
+ci_l = board_l + 2*cl + extra_l;            // 22.2
+ci_h_bot = board_drop + stack_h + pad_h;    //  8.5  (split → floor)
+ci_h_top = cam_h - board_drop + cam_cl;     //  8.5  (split → ceiling)
 
-// ── IR RECEIVER (VS1838B, +X side wall of upper half) ────────────
-// Package: flat front window 5.8 mm wide × 7.4 mm tall × 3.0 mm deep.
-// Receiver window faces outward (+X); leads/wire run into cavity to XIAO.
-vs1838_w  = 5.8;   // body width  (Y direction in slot)
-vs1838_h  = 7.4;   // body height (Z direction in slot)
-vs1838_d  = 3.0;   // body depth  (through wall; protrudes ~0.5 mm into cavity)
-vs1838_cl = 0.3;   // per-side slot clearance
-vs1838_yoff = 0;           // slot center Y (0 = box center; no conflict with M3 at ±join_y)
-vs1838_zoff = box_h_top/2; // slot center Z in upper half
-vs1838_side = 1;           // which X wall: 1 = +X (right), -1 = -X (left)
+// Board and bay centres within the cavity
+board_cx = ci_w/2 - margin_r - cl - board_w/2;   // +1.25
+board_cy = 0;
+bay_cx   = -ci_w/2 + bay_w/2;                    // −13.6
 
-// ── USB OPENING (in +Y face, centered on board edge) ─────────
-usb_cut_w = usb_w + 1.0;  // clearance for plug
-usb_cut_h = usb_h + 1.0;
+// ── BOX SHELL ──────────────────────────────────────────────────
+wall      = 2.5;
+box_w     = ci_w + 2*wall;      // 40.2
+box_l     = ci_l + 2*wall;      // 27.2
+box_h_bot = ci_h_bot + wall;    // 11.0
+box_h_top = ci_h_top + wall;    // 11.0
 
-// ── SNAP CLIPS (inside ±X walls, near −Y end) ────────────────
-// Board slides in from −Y; clips on ±X inner walls engage the board edge.
-clip_l     = 5.0;   // clip body length (Y direction)
-clip_h     = pcb_t + 1.5;  // clip height spans PCB edge
-clip_t     = 1.4;   // cantilever arm thickness (flex arm for PETG)
-clip_land  = 1.2;   // notch ledge depth (captures board edge)
-clip_y_pos = -ci_l/2 + clip_l/2 + 1.0;  // near back wall (−Y)
+// Alignment lip on the lid that drops into the lower half
+lip_h  = 1.2;
+lip_t  = 1.0;
+lip_cl = 0.2;
 
-// ── DUST CAP (press-fit into −Y opening) ─────────────────────
-cap_plug_t     = 4.0;    // depth of interference plug
-cap_flange_t   = 2.5;    // flange plate thickness
-cap_interf     = 0.18;   // press-fit interference per side (PETG flex)
-cap_plug_w     = box_w - 2*cap_interf;  // slightly oversized → tight fit
-cap_plug_l     = box_l - 2*cap_interf;
-cap_flange_w   = box_w + 4.0;           // flange overhangs box by 2 mm each side
-cap_flange_l   = box_l + 4.0;
+// ── LID SCREWS (4 × M3, self-tapping into printed bosses) ──────
+join_boss_d = 5.5;   // boss outer diameter
+join_pilot  = 2.5;   // pilot hole — M3 cuts its own thread in PETG
+join_free   = 3.3;   // clearance hole through the lid
+join_cb_d   = 6.2;   // counterbore for the M3 head
+join_cb_h   = 2.5;
+join_x = ci_w/2 - join_boss_d/2;         // ±14.85
+join_y = ci_l/2 - join_boss_d/2 - 0.5;   // ± 7.85
 
-// ── BALL JOINT ───────────────────────────────────────────────
-ball_d    = 20.0;   // ball diameter; matches socket on box
-ball_r    = ball_d / 2;
-sock_wall = 3.5;    // socket shell thickness
-// Socket wraps ~58% of sphere depth for retention without jamming.
-// (50%+ is required for ball retention; 65%+ requires force to remove)
-sock_depth = ball_r * 1.15;
-sock_gap  = 1.4;    // clamp gap width; closes when M4 screw is tightened
-// Clamping ear: tab extending from one X side, houses the M4 screw
-ear_w     = 14.0;  // ear tab width (X direction)
-ear_h     = 10.0;  // ear tab height (Z direction, from split line down)
-clamp_screw_d = 4.5;   // M4 clearance through-hole (3.5 for M3)
-clamp_nut_af  = 7.0;   // M4 nut across-flats
-clamp_nut_h   = 3.2;   // M4 nut height (for nut-trap pocket)
+// ── CAMERA APERTURE (lid top face) ─────────────────────────────
+cam_hole_d   =  9.0;   // OV2640 lens barrel ≈ 7 mm; extra for alignment
+cam_relief_d = 12.0;   // inner counterbore thins the wall at the lens
+cam_relief_h =  1.2;
+cam_hole_x   = board_cx;   // over the board centre
+cam_hole_y   = board_cy;
 
-// ── BOX JOIN SCREWS (M3, one per long side) ──────────────────
-join_d    = 2.7;   // M3 clearance hole
-join_boss = 5.5;   // boss OD
-join_y    = ci_l / 2 - join_boss / 2 - 1.0;  // Y position of bosses — near corners, clears VS1838B slot
+// ── IR EMITTER (through-hole LED, lid top face, in the bay) ────
+// Faces the same direction as the camera. Set ir_led_d = 3.0 for T-1.
+ir_led_d  = 5.0;   // T-5 (5 mm) package body diameter
+ir_led_cl = 0.2;   // per-side clearance — dome flange retains the LED
+ir_led_x  = bay_cx;
+ir_led_y  = 0;
 
-// ── ANTENNA CABLE GROOVE (on −Z face of lower half) ──────────
-ant_w     = 4.0;   // groove width
-ant_h     = 2.5;   // groove depth
-// Positioned to one side of ball socket, routing toward −Y (T bracket)
-ant_x_off = ball_r + sock_wall + 2.0;
+// ── IR RECEIVER: VS1838B (side wall of the bay) ────────────────
+// Package: flat window 5.8 mm wide × 7.4 mm tall × 3.0 mm deep.
+// Faces sideways so it picks up the remote from off-axis.
+vs_w    = 5.8;
+vs_h    = 7.4;
+vs_d    = 3.0;   // slightly deeper than wall — protrudes ~0.5 mm inside
+vs_cl   = 0.3;
+vs_side = -1;    // −1 = −X wall (bay side), +1 = +X wall
+vs_y    = 0;
+vs_z    = ci_h_top/2;   // centred in the lid cavity
 
-// ── T-BASE ───────────────────────────────────────────────────
-arm_w    = 80.0;   // crossbar total width
-arm_d    = 22.0;   // crossbar depth (front-to-back)
-arm_h    =  6.0;   // crossbar thickness
-stem_w   = 24.0;   // stem width
-stem_l   = 38.0;   // stem length (crossbar rear face to ball center)
-stem_h   =  6.0;   // stem thickness (same as arm)
-// Spax #8 wafer-head: major thread ≈ 4.2 mm, head ≈ 14 mm flat diameter.
-// Wafer head sits flush on surface — no countersink needed.
-mount_d  = 4.5;    // through-hole for #8 shank
-mount_dx = 30.0;   // half-spacing between hole centers (holes at ±mount_dx)
+// ── BALL AND SOCKET ────────────────────────────────────────────
+// Two-piece clamp: an integral cup under the lower half plus a
+// separate socket_cap bolted up against it. No flexing needed —
+// the ball drops in when the cap is off.
+ball_d    = 15.0;   // ball diameter (base and socket must match)
+ball_r    = ball_d/2;
+ball_cl   = 0.15;   // socket cavity clearance over the ball
+sock_wall =  3.0;   // material around the ball cavity
+sock_od   = ball_d + 2*sock_wall;   // 21.0
+sock_roof =  2.5;   // material between box floor and top of ball
+sock_gap  =  1.6;   // parting gap; screws close it onto the ball
 
-// ── GLOBAL RENDER QUALITY ────────────────────────────────────
-$fn = 64;   // set to 32 for fast preview, 128 for final STL export
+// Ball centre in box coordinates (also the socket parting plane)
+ball_cz = -box_h_bot - sock_roof - ball_r;   // −21.0
+
+// Socket clamp screws (2 × M3 with nuts, side-loaded nut traps)
+sock_screw_d  =  3.4;    // M3 clearance
+sock_screw_dx = 13.0;    // ± from centre
+sock_nut_af   =  5.5;    // M3 nut across flats
+sock_nut_h    =  2.6;
+// The ear must reach well inside the cup radius (sock_od/2) so it merges
+// into the cup wall instead of hanging off it — this joint carries the
+// whole clamping load.
+sock_ear_w    = 14.0;    // ear size (X): spans x = 6 … 20
+sock_ear_l    = 11.0;    // ear size (Y)
+sock_ear_h    =  6.0;    // ear thickness (Z)
+
+// Cap seat: throat diameter sets the tilt range. Larger throat = more
+// tilt, less wrap around the ball. 13.5 mm gives roughly ±30°.
+sock_throat_d = 13.5;
+sock_flare_d  = 20.0;   // clearance cone below the throat
+sock_flare_h  =  3.0;
+
+// ── T-BASE (wall bracket) ──────────────────────────────────────
+// Flat plate, two screw holes, short tapered post, ball on top —
+// the RAM-mount pattern.
+plate_l  = 50.0;   // plate length (X)
+plate_w  = 24.0;   // plate width  (Y); ends are rounded to plate_w/2
+plate_t  =  6.0;   // plate thickness
+// Spax #8 wafer head: shank ≈ 4.2 mm, head ≈ 9.5 mm across.
+mount_d     =  4.5;   // through-hole for the #8 shank
+mount_cb_d  = 10.0;   // shallow counterbore so the head sits recessed
+mount_cb_h  =  1.0;
+mount_dx    = 17.0;   // ± from centre (34 mm hole spacing)
+// Post. A slim neck keeps most of the sphere exposed, which is what the
+// socket grips and what sets the tilt range — a fat neck buries the ball.
+post_d_base = 12.0;   // post diameter where it meets the plate
+post_d_top  =  7.0;   // post diameter where it meets the ball
+post_clear  = 10.0;   // exposed post length: plate top → ball underside
+ball_z_base = plate_t + post_clear + ball_r;   // ball centre height
+
+// ── GLOBAL RENDER QUALITY ──────────────────────────────────────
+$fn = 64;   // 32 for fast preview, 128 for final STL export

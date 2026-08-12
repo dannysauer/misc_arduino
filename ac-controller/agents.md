@@ -59,12 +59,22 @@ Adjust the entity ID to match the actual Z-wave outlet entity.
 
 ## Enclosure (`enclosure/`)
 
-- 4-piece design: T-base, box lower, box upper, dust cap
-- All parametric OpenSCAD; all dimensions in `params.scad`
-- Ball diameter 20 mm; M4 clamp screw; Spax #8 wafer-head mounting screws
+- 4 parts: `base` (wall plate + post + ball), `box_lower` (+ integral socket
+  cup), `box_upper` (lid, carries camera + IR emitter + IR receiver),
+  `socket_cap` (ball clamp)
+- All parametric OpenSCAD; **all** dimensions live in `params.scad`
+- Ball 15 mm; two-piece bolted socket clamp (nothing flexes); M3 throughout
+  except the two Spax #8 wafer-head screws that hold the base to the wall
+- The lid has an 8 mm "accessory bay" on −X because the XIAO fills its own
+  footprint — without it there is no room for an IR LED hole that is not
+  blocked by a wall underneath
 - Full details in [enclosure/specs.md](enclosure/specs.md)
 - Render STLs: `cd enclosure && ./render.sh` (requires OpenSCAD installed)
-- STL files go to `enclosure/stl/` (gitignored if large)
+- Preview PNGs in `enclosure/preview/`; STLs go to `enclosure/stl/` (gitignored)
+- Renders here were done headless: `apt install openscad xvfb`, then
+  `Xvfb :99 & DISPLAY=:99 openscad --render --viewall --autocenter ...`.
+  Note the container is ephemeral — apt packages do not survive between
+  sessions, so reinstall before rendering.
 
 ## Known TODOs
 
@@ -73,6 +83,11 @@ Adjust the entity ID to match the actual Z-wave outlet entity.
 - [ ] Verify XIAO PDM mic pin config compiles cleanly (ESPHome i2s_audio API
       varies between versions; may need `i2s_bclk_pin` adjustment)
 - [ ] Test-print enclosure and adjust `cl` (fit clearance) if board is tight
-- [ ] Tune `cap_interf` for dust cap press-fit on your specific printer/PETG
-- [ ] Confirm `cam_hole_yoff` positions camera hole over actual lens location
-      (depends on how camera flex cable is routed inside the box)
+- [ ] Verify `stack_h` (6.0 mm) and `cam_h` (9.0 mm) against the real board —
+      these were estimated, and they set the box height and where the lens
+      lands relative to the aperture
+- [ ] Confirm `cam_hole_x` / `cam_hole_y` sit over the actual lens (currently
+      assumes the camera is centred on the board; depends on how the flex
+      cable is folded)
+- [ ] Check the socket grips firmly once printed; if it slips under load,
+      reduce `sock_throat_d` for more wrap around the ball

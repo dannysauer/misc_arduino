@@ -1,48 +1,60 @@
-// base.scad — T-shaped wall-mount bracket with ball
+// base.scad — wall-mount bracket: flat plate + post + ball
 //
-// PRINT ORIENTATION: flat face down (the face that mounts against the wall).
-//   The ball will require support material; supports detach cleanly in PETG.
-// MOUNTING: two Spax #8 wafer-head cabinet screws through the crossbar.
-//   The wafer head sits flat on the bracket surface — no countersink needed.
-// BALL: 20 mm diameter, compatible with the socket in box_lower.scad.
+// Follows the RAM-mount pattern: a rectangular plate with rounded ends,
+// two screw holes near the ends, and a short tapered post rising from
+// the centre carrying the ball. The "T" is the side profile, not the
+// plan view.
+//
+//        ●        ← ball (ball_d)
+//        |        ← tapered post (post_clear exposed)
+//   ○─────────○   ← plate with two mounting holes
+//
+// PRINT ORIENTATION: plate flat on the bed, ball pointing up.
+//   The ball needs supports where it flares out above the post; PETG
+//   supports snap off cleanly. Alternatively print at 0.12 mm layers
+//   with a brim and accept a slightly rough underside on the ball —
+//   that surface is inside the socket and never seen.
+// MATERIAL: PETG. This is the load-bearing part.
 
 include <params.scad>
 
-// Full T-bracket with ball, printed flat (wall-face down in slicer)
+// Plate: stadium profile (rectangle with semicircular ends)
+module base_plate() {
+    hull()
+        for (sx = [-1, 1])
+            translate([sx * (plate_l/2 - plate_w/2), 0, 0])
+                cylinder(h=plate_t, d=plate_w);
+}
+
 module base() {
+    // Post reaches up to where the sphere has narrowed to post_d_top,
+    // so the two surfaces meet without a step or an undercut.
+    post_top_z = ball_z_base - sqrt(pow(ball_r, 2) - pow(post_d_top/2, 2));
+
     difference() {
         union() {
-            // ── Crossbar ──────────────────────────────────────────
-            // Stadium profile (rounded ends) for strength and aesthetics
-            hull() {
-                for (dx = [-(arm_w/2 - arm_d/2),  arm_w/2 - arm_d/2])
-                    translate([dx, 0, 0])
-                        cylinder(h=arm_h, d=arm_d);
-            }
+            base_plate();
 
-            // ── Stem ──────────────────────────────────────────────
-            // Centered on crossbar, extends in +Y toward ball
-            hull() {
-                // Blends smoothly into crossbar
-                translate([-stem_w/2, 0, 0])
-                    cube([stem_w, arm_d*0.6, stem_h]);
-                // End of stem (circular for blend into ball)
-                translate([0, arm_d*0.6 + stem_l - stem_w/2, stem_h/2])
-                    cylinder(h=stem_h, d=stem_w, center=true);
-            }
+            // ── Tapered post ──────────────────────────────────────
+            translate([0, 0, plate_t - 0.01])
+                cylinder(h = post_top_z - plate_t + 0.01,
+                         d1 = post_d_base, d2 = post_d_top);
 
             // ── Ball ──────────────────────────────────────────────
-            // Center of ball at top of stem to minimize overhang at base.
-            // Upper hemisphere overhangs and needs support in slicer.
-            translate([0, arm_d*0.6 + stem_l, arm_h])
+            translate([0, 0, ball_z_base])
                 sphere(r=ball_r);
         }
 
-        // ── Mounting holes (Spax #8 wafer head) ──────────────────
-        // Through-holes only; wafer head is flat — no countersink.
-        for (dx = [-mount_dx, mount_dx])
-            translate([dx, arm_d/2, -1])
-                cylinder(h=arm_h + 2, d=mount_d);
+        // ── Mounting holes (Spax #8 wafer head) ───────────────────
+        // Counterbore recesses the head so it cannot foul the socket
+        // when the mount is tilted hard over.
+        for (sx = [-1, 1])
+            translate([sx * mount_dx, 0, 0]) {
+                translate([0, 0, -1])
+                    cylinder(h=plate_t + 2, d=mount_d);
+                translate([0, 0, plate_t - mount_cb_h])
+                    cylinder(h=mount_cb_h + 1, d=mount_cb_d);
+            }
     }
 }
 

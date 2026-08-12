@@ -1,116 +1,99 @@
-// box_upper.scad — upper half (lid) of PCB enclosure
+// box_upper.scad — lid: camera aperture, IR emitter hole, IR receiver slot
 //
-// Contains: board cavity (upper portion, camera space), camera hole,
-//           upper half of ball socket, M3 through-holes for joining,
-//           and alignment lip that registers on lower half split face.
+// Contains: camera aperture with an inner relief, the IR LED hole in the
+//           accessory bay, the VS1838B slot in the bay's side wall, the
+//           upper part of the USB-C opening, an alignment lip, four screw
+//           columns, and pads that press the board onto the lower half's
+//           support pads.
 //
-// COORDINATE SYSTEM: same as box_lower — origin at split plane center.
-//   +Z = upward (camera direction)
+// The lid carries NO socket geometry — the ball joint lives entirely on
+// box_lower plus socket_cap.
 //
-// PRINT ORIENTATION: split face down (camera-hole face up).
-//   The camera hole bridging is short; no supports needed.
+// PRINT ORIENTATION: top face DOWN on the bed (cavity opening upwards).
+//   No supports: the aperture, LED hole and lip all print cleanly, and
+//   the camera face gets the best surface finish.
 // MATERIAL: PETG
 
 include <params.scad>
 
-// M3 clearance hole with counter-bore for screw head
-module join_hole() {
-    // Through-hole
-    cylinder(h=box_h_top + 2, d=join_d);
-    // Counter-bore for M3 cap head (5.5 mm OD, 3 mm deep) — optional
-    translate([0, 0, box_h_top - 3])
-        cylinder(h=4, d=5.8);
-}
-
 module box_upper() {
     difference() {
         union() {
-            // ── Outer body of upper half ───────────────────────
+            // ── Shell of the lid ──────────────────────────────────
             translate([-box_w/2, -box_l/2, 0])
                 cube([box_w, box_l, box_h_top]);
 
-            // ── Upper ball socket ──────────────────────────────
-            // Mirror of lower socket: fills gap between lower clamp
-            // and the bottom of the upper half at Z = 0.
-            // The upper socket is a shallow dish that seats over the ball.
+            // ── Alignment lip ─────────────────────────────────────
+            // Drops into the lower half's cavity and locates the lid.
             difference() {
-                sphere(r=ball_r + sock_wall);
-                sphere(r=ball_r + cl);
-                // Keep only the band from Z=0 down to -(sock_depth - box_h_bot socket contribution)
-                // Upper half socket is shallower — keeps ball aligned laterally.
-                translate([-(ball_r+sock_wall+1), -(ball_r+sock_wall+1),
-                           -(ball_r+sock_wall)/2])
-                    cube([(ball_r+sock_wall+1)*2, (ball_r+sock_wall+1)*2,
-                           (ball_r+sock_wall)/2 + 0.01]);
-                translate([-(ball_r+sock_wall+1), -(ball_r+sock_wall+1), 0])
-                    cube([(ball_r+sock_wall+1)*2, (ball_r+sock_wall+1)*2,
-                           ball_r+sock_wall+1]);
-                // Mirror the clamp gap (+X side)
-                translate([0, -(ball_r+sock_wall+1), -(ball_r+sock_wall+1)])
-                    cube([ball_r+sock_wall+1, (ball_r+sock_wall+1)*2,
-                          (ball_r+sock_wall+1)*2]);
+                translate([-(ci_w/2 - lip_cl), -(ci_l/2 - lip_cl), -lip_h])
+                    cube([ci_w - 2*lip_cl, ci_l - 2*lip_cl, lip_h]);
+                translate([-(ci_w/2 - lip_cl - lip_t),
+                           -(ci_l/2 - lip_cl - lip_t), -lip_h - 0.1])
+                    cube([ci_w - 2*(lip_cl + lip_t),
+                          ci_l - 2*(lip_cl + lip_t), lip_h + 0.2]);
             }
 
-            // ── Alignment lip ─────────────────────────────────
-            // 1 mm lip around the inner perimeter of the split face
-            // registers the upper half on the lower half precisely.
-            difference() {
-                translate([-ci_w/2 - 0.8, -ci_l/2 - 0.8, -1.0])
-                    cube([ci_w + 1.6, ci_l + 1.6, 1.0]);
-                translate([-ci_w/2 + 0.8, -ci_l/2 + 0.8, -1.1])
-                    cube([ci_w - 1.6, ci_l - 1.6, 1.2]);
-            }
+            // ── Screw columns ─────────────────────────────────────
+            // Carry the screw from the lid's top face down to just above
+            // the bosses in the lower half.
+            for (sx = [-1, 1])
+                for (sy = [-1, 1])
+                    translate([sx * join_x, sy * join_y, -lip_h])
+                        cylinder(h = ci_h_top + lip_h, d = join_boss_d);
+
+            // ── Board press pads ──────────────────────────────────
+            // Directly above the support pads in the lower half, so the
+            // board is clamped at its four corners when the lid is bolted
+            // down.
+            for (sx = [-1, 1])
+                for (sy = [-1, 1])
+                    translate([board_cx + sx * (board_w/2 - 2) - 2,
+                               board_cy + sy * (board_l/2 - 2) - 2,
+                               -board_drop])
+                        cube([4, 4, board_drop]);
         }
 
-        // ── Board cavity cutout (upper portion) ───────────────
-        translate([-ci_w/2, -ci_l/2, 0])
-            cube([ci_w, ci_l, ci_h_top]);
+        // ── Lid cavity ────────────────────────────────────────────
+        translate([-ci_w/2, -ci_l/2, -0.1])
+            cube([ci_w, ci_l, ci_h_top + 0.1]);
 
-        // ── Camera hole (top face, +Z) ─────────────────────────
-        translate([cam_hole_xoff, cam_hole_yoff, box_h_top - 0.1])
-            cylinder(h=wall + 0.2, d=cam_hole_d);
-        // Countersunk funnel on outside for easier camera alignment
-        translate([cam_hole_xoff, cam_hole_yoff, box_h_top - 0.5])
-            cylinder(h=1.0, d1=cam_hole_d, d2=cam_hole_d + 2.0);
+        // ── Camera aperture ───────────────────────────────────────
+        translate([cam_hole_x, cam_hole_y, ci_h_top - 0.1])
+            cylinder(h = wall + 0.2, d = cam_hole_d);
+        // Inner relief: thins the wall at the lens so the aperture does
+        // not vignette the OV2640's field of view.
+        translate([cam_hole_x, cam_hole_y, ci_h_top - 0.1])
+            cylinder(h = cam_relief_h + 0.1, d = cam_relief_d);
 
-        // ── IR emitter hole (T-5 LED, top +Z face, left of camera) ───
-        // LED sits dome-up; dome flange (~5.5 mm) rests on outer surface.
-        // On short wire — insert from outside, route inside to XIAO GPIO4.
-        translate([ir_led_xoff, ir_led_yoff, box_h_top - 0.1])
-            cylinder(h=wall + 0.2, d=ir_led_d + 2*ir_led_cl);
-        // Lead-in chamfer (outside) eases LED insertion
-        translate([ir_led_xoff, ir_led_yoff, box_h_top - 0.6])
-            cylinder(h=0.7, d1=ir_led_d + 2*ir_led_cl,
-                            d2=ir_led_d + 2*ir_led_cl + 1.6);
+        // ── IR emitter hole ───────────────────────────────────────
+        // The LED is pushed in from INSIDE, dome first. The flange at the
+        // base of the dome is wider than the hole and seats against the
+        // inner face of the top plate, so the LED cannot fall out.
+        translate([ir_led_x, ir_led_y, ci_h_top - 0.1])
+            cylinder(h = wall + 0.2, d = ir_led_d + 2*ir_led_cl);
 
-        // ── VS1838B receiver slot (+X side wall) ──────────────────
-        // Flat receiver window faces +X (outward); insert from outside.
-        // Leads connect via short wire to XIAO GPIO3 inside cavity.
-        // Body depth (3 mm) slightly exceeds wall (2.5 mm); ~0.5 mm
-        // protrudes into the cavity — wires have enough slack.
-        vs_sw  = vs1838_w + 2*vs1838_cl;   // slot width  (Y)
-        vs_sh  = vs1838_h + 2*vs1838_cl;   // slot height (Z)
-        // Anchor cube at outer face of chosen wall; cube always extends +X.
-        // side=1 (+X): start at inner face, cut outward.
-        // side=-1 (−X): start just outside outer face, cut inward.
-        vs_x0  = (vs1838_side > 0) ? (box_w/2 - wall - 0.1) : (-box_w/2 - 0.1);
-        translate([vs_x0, vs1838_yoff - vs_sw/2, vs1838_zoff - vs_sh/2])
+        // ── VS1838B receiver slot ─────────────────────────────────
+        // Pushed in from outside; the window sits flush with the wall and
+        // ~0.5 mm of the body protrudes into the bay.
+        vs_sw = vs_w + 2*vs_cl;
+        vs_sh = vs_h + 2*vs_cl;
+        vs_x0 = (vs_side > 0) ? (ci_w/2 - 0.1) : (-box_w/2 - 0.1);
+        translate([vs_x0, vs_y - vs_sw/2, vs_z - vs_sh/2])
             cube([wall + 0.2, vs_sw, vs_sh]);
 
-        // ── USB-C opening continues into upper half (+Y face) ──
-        usb_z_center = -(ci_h_bot - comp_bot - pcb_t/2) + usb_z_off;
-        translate([-usb_cut_w/2, box_l/2 - 0.1, usb_z_center - usb_cut_h/2])
-            cube([usb_cut_w, wall + 1, usb_cut_h]);
+        // ── USB-C opening (+Y wall, portion above the split) ──────
+        translate([board_cx - (usb_w + 1.5)/2, ci_l/2 - 0.1, -1])
+            cube([usb_w + 1.5, wall + 1, usb_h + 1.6]);
 
-        // ── M3 join through-holes (±Y positions on ±X walls) ──
-        for (dy = [-join_y, join_y])
-            translate([-box_w/2 - 1, dy, box_h_top/2])
-                rotate([0, 90, 0])
-                    join_hole();
-
-        // ── −Y face: open inner cavity (dust cap end) ─────────
-        translate([-ci_w/2, -box_l/2 - 0.1, 0])
-            cube([ci_w, wall + 0.2, ci_h_top]);
+        // ── Screw holes + counterbores ────────────────────────────
+        for (sx = [-1, 1])
+            for (sy = [-1, 1])
+                translate([sx * join_x, sy * join_y, -lip_h - 1]) {
+                    cylinder(h = box_h_top + lip_h + 2, d = join_free);
+                    translate([0, 0, box_h_top + lip_h + 1 - join_cb_h])
+                        cylinder(h = join_cb_h + 1, d = join_cb_d);
+                }
     }
 }
 

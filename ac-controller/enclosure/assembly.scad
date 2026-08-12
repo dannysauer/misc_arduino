@@ -1,39 +1,31 @@
 // assembly.scad — full assembly preview
 //
-// Use this for visual checking only; do not export as STL.
-// Each part is positioned as it would be in real life.
-// Run: openscad assembly.scad
-// To isolate a part, comment out the others.
+// Visual check only; do not export this as an STL. The base sits with its
+// plate on the Z=0 plane and the box parts are lifted so their socket
+// centre lands on the ball.
+//
+// Run:  openscad assembly.scad
+// To study one part, comment out the others.
 
 include <params.scad>
 use <base.scad>
 use <box_lower.scad>
 use <box_upper.scad>
-use <dust_cap.scad>
+use <socket_cap.scad>
 
-// Distance from box split plane to ball center
-// Ball sits below lower half; box mounts on top of ball.
-box_above_ball = box_h_bot + sock_depth - ball_r;
+// Tilt of the box on the ball, for checking clearance (0 = straight up).
+// The joint is good for roughly ±30° before the post fouls the throat.
+tilt = 0;
 
-// ── T-base (wall mount) ─────────────────────────────────────
-// Shown with stem pointing up (+Z) for a wall-mount perspective.
+// ── Wall bracket ────────────────────────────────────────────────
 color("SaddleBrown", 0.9)
-    rotate([0, 0, 0])
-        base();
+    base();
 
-// ── Box lower half ──────────────────────────────────────────
-color("DodgerBlue", 0.8)
-    translate([0, arm_d*0.6 + stem_l, arm_h + box_above_ball])
-        box_lower();
-
-// ── Box upper half ──────────────────────────────────────────
-color("DeepSkyBlue", 0.7)
-    translate([0, arm_d*0.6 + stem_l, arm_h + box_above_ball])
-        box_upper();
-
-// ── Dust cap (shown slightly pulled out for visibility) ─────
-color("LightGray", 0.85)
-    translate([0, arm_d*0.6 + stem_l - box_l/2 - 8,
-               arm_h + box_above_ball])
-        rotate([90, 0, 0])
-            dust_cap();
+// ── Box + socket cap, rotated about the ball centre ─────────────
+translate([0, 0, ball_z_base])
+    rotate([tilt, 0, 0])
+        translate([0, 0, -ball_cz]) {
+            color("DodgerBlue", 0.85)   box_lower();
+            color("DeepSkyBlue", 0.55)  box_upper();
+            color("LightSlateGray", 0.9) socket_cap();
+        }
