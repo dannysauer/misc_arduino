@@ -59,22 +59,31 @@ Adjust the entity ID to match the actual Z-wave outlet entity.
 
 ## Enclosure (`enclosure/`)
 
-- 4 parts: `base` (wall plate + post + ball), `box_lower` (+ integral socket
-  cup), `box_upper` (lid, carries camera + IR emitter + IR receiver),
-  `socket_cap` (ball clamp)
+- 4 parts: `base` (wall plate + post + ball), `box` (open-backed shell whose
+  closed face carries the camera, IR emitter and IR receiver holes), `cover`
+  (flat back plate carrying the ball socket), `socket_cap` (ball clamp)
+- The board mounts camera-side-down facing the aperture wall, so the optics
+  look out and every solder joint stays inside. Only external cable is USB-C.
+- The XIAO has no mounting holes: the cover screws run BESIDE the board into
+  standoffs, and the board is pinched between the standoff seats and pads on
+  the cover (`pinch` = 0.15 mm interference)
 - All parametric OpenSCAD; **all** dimensions live in `params.scad`
-- Ball 15 mm; two-piece bolted socket clamp (nothing flexes); M3 throughout
-  except the two Spax #8 wafer-head screws that hold the base to the wall
-- The lid has an 8 mm "accessory bay" on −X because the XIAO fills its own
-  footprint — without it there is no room for an IR LED hole that is not
-  blocked by a wall underneath
+- Ball 15 mm; two-piece bolted socket (nothing flexes); M3 throughout except
+  the two Spax #8 wafer-head screws holding the base to the wall
+- `cam_h` (9.0 mm) is the load-bearing guess in the whole design: it sets the
+  gap between the aperture wall and the board, hence the box depth and whether
+  the lens lands at the aperture. Verify against the real board before printing.
 - Full details in [enclosure/specs.md](enclosure/specs.md)
 - Render STLs: `cd enclosure && ./render.sh` (requires OpenSCAD installed)
 - Preview PNGs in `enclosure/preview/`; STLs go to `enclosure/stl/` (gitignored)
 - Renders here were done headless: `apt install openscad xvfb`, then
   `Xvfb :99 & DISPLAY=:99 openscad --render --viewall --autocenter ...`.
-  Note the container is ephemeral — apt packages do not survive between
-  sessions, so reinstall before rendering.
+  The container is ephemeral — apt packages do not survive between sessions,
+  so reinstall before rendering.
+- Worth re-running after any geometry change: export the STLs and count
+  connected shells (weld vertices, union-find over triangles). An earlier
+  revision shipped press pads that floated unattached inside the lid, and a
+  shell count catches exactly that.
 
 ## Known TODOs
 

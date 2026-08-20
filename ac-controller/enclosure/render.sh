@@ -29,19 +29,19 @@ render() {
 
 case "${1:-all}" in
     base)        render base ;;
-    box_lower)   render box_lower ;;
-    box_upper)   render box_upper ;;
+    box)         render box ;;
+    cover)       render cover ;;
     socket_cap)  render socket_cap ;;
     all)
         render base
-        render box_lower
-        render box_upper
+        render box
+        render cover
         render socket_cap
         echo "Done. STL files in stl/"
         ;;
     *)
         echo "Unknown part: $1"
-        echo "Valid parts: base box_lower box_upper socket_cap all"
+        echo "Valid parts: base box cover socket_cap all"
         exit 1
         ;;
 esac

@@ -1,43 +1,38 @@
-// socket_cap.scad — lower half of the ball clamp
+// socket_cap.scad — clamp half of the ball socket
 //
-// Bolts up against the cup on box_lower with two M3 screws, trapping the
-// ball between them. Loosen the screws and the mount swivels; tighten and
-// it locks. Take the screws out and the ball lifts straight out — no
-// flexing, no snap fit.
+// Bolts to the outer face of the cover with two M3 screws, trapping the
+// ball between the cover's recess and this seat. Loosen to aim, tighten
+// to lock, remove entirely to take the mount off the ball.
 //
-// The seat is a spherical cup that ends at a throat; below the throat a
-// cone flares away so the post on the base can tilt without fouling.
-// Widening sock_throat_d buys tilt range at the cost of grip.
+// The seat is a spherical band that ends at a throat; below the throat a
+// cone flares away so the base's post can tilt without fouling.
 //
-// PRINT ORIENTATION: flat (bottom) face down on the bed. No supports —
-//   the flare below the throat is a ~47° overhang and the seat above it
-//   is shallower still.
+// PRINT ORIENTATION: wide (flared) face DOWN on the bed. No supports —
+//   the flare narrows as it rises and the seat above it is shallower
+//   still; only the two screw counterbores bridge.
 // MATERIAL: PETG
 //
-// NOTE: the part is modelled in box coordinates (it sits ~27 mm below the
-//   origin, where it lives in the assembly). Slicers drop it onto the bed
-//   automatically on import.
+// NOTE: modelled where it sits in the assembly, ~31 mm along +Z from the
+//   box's aperture wall. Slicers drop it onto the bed on import.
 
 include <params.scad>
 
-// Depth of the spherical seat: from the cap's top face down to the throat
-seat_h = sqrt(pow(ball_r + ball_cl, 2) - pow(sock_throat_d/2, 2)) - sock_gap;
-cap_h  = seat_h + sock_flare_h;
-cap_top_z = ball_cz - sock_gap;
+// Seat runs from the cap's top face down to the throat
+sock_seat_h = sqrt(pow(ball_r + ball_cl, 2) - pow(sock_throat_d/2, 2))
+              - sock_gap;
+cap_h  = sock_seat_h + sock_flare_h;
+cap_z0 = ball_cz + sock_gap;   // face nearest the cover
+cap_z1 = cap_z0 + cap_h;       // outer face
 
 module socket_cap() {
     difference() {
-        union() {
-            // ── Body ──────────────────────────────────────────────
-            translate([0, 0, cap_top_z - cap_h])
+        // ── Body: stadium shape spanning both screws ──────────────
+        hull() {
+            translate([0, 0, cap_z0])
                 cylinder(h=cap_h, d=sock_od);
-
-            // ── Clamp ears (match the ears on box_lower) ──────────
-            for (sx = [-1, 1])
-                translate([sx * sock_screw_dx - sock_ear_w/2,
-                           -sock_ear_l/2,
-                           cap_top_z - cap_h])
-                    cube([sock_ear_w, sock_ear_l, cap_h]);
+            for (sy = [-1, 1])
+                translate([0, sy * sock_screw_dy, cap_z0])
+                    cylinder(h=cap_h, d=9);
         }
 
         // ── Spherical seat ────────────────────────────────────────
@@ -45,15 +40,16 @@ module socket_cap() {
             sphere(r = ball_r + ball_cl);
 
         // ── Clearance flare below the throat ──────────────────────
-        translate([0, 0, cap_top_z - cap_h - 0.01])
+        translate([0, 0, cap_z1 - sock_flare_h])
             cylinder(h = sock_flare_h + 0.01,
-                     d1 = sock_flare_d, d2 = sock_throat_d);
+                     d1 = sock_throat_d, d2 = sock_flare_d);
 
-        // ── Screw holes, counterbored from below for the heads ────
-        for (sx = [-1, 1])
-            translate([sx * sock_screw_dx, 0, cap_top_z - cap_h - 1]) {
+        // ── Screw holes, counterbored from the outer face ─────────
+        for (sy = [-1, 1])
+            translate([0, sy * sock_screw_dy, cap_z0 - 1]) {
                 cylinder(h = cap_h + 2, d = sock_screw_d);
-                cylinder(h = 3 + 1, d = 6.4);
+                translate([0, 0, cap_h + 1 - sock_cb_h])
+                    cylinder(h = sock_cb_h + 1, d = sock_cb_d);
             }
     }
 }
