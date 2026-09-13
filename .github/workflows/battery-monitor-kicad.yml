@@ -91,7 +91,7 @@ jobs:
               jq -r '[.sheets[].violations[] | select(.severity == "error")][0:30][] | "- **\(.type)**: \(.description) — \([.items[].description] | join("; "))"' /tmp/kicad-validation/erc.json
               echo
               echo "### First 30 warnings"
-              jq -r '[.sheets[].violations[] | select(.severity == "warning")][0:30][] | "- **\(.type)**: \(.description) — \([.items[].description] | join("; "))"' /tmp/kicad-validation/erc.json
+              jq -r '[.sheets[].violations[] | select(.severity == "warning")][0:30][] | "- **\(.type)**: \(.description) — \([.items[] | "\(.description) @ (\(.pos.x), \(.pos.y))"] | join("; "))"' /tmp/kicad-validation/erc.json
             fi
           } > /tmp/kicad-validation/comment.md
 
