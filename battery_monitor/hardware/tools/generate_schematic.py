@@ -69,7 +69,7 @@ def inst(lib,ref,val,x,y,foot='',datasheet='',desc='',dnp='no'):
     sl=[f'(symbol (lib_id "BM:{lib}") (at {x} {y} 0) (unit 1) (in_bom yes) (on_board yes) (uuid {sid})']
     sl += ['  '+p for p in plist]
     for num in nums: sl.append(f'  (pin "{num}" (uuid {u()}))')
-    sl.append(f'  (instances (project "battery_monitor" (path "/{ROOT}" (reference "{ref}") (unit 1)))))')
+    sl.append(f'  (instances (project "battery_monitor" (path "/{ROOT}" (reference "{ref}") (unit 1))))')
     sl.append(')')
     symbols.append('\n'.join(sl)); return sid
 
