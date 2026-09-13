@@ -33,21 +33,9 @@ jobs:
           sudo apt-get install --yes --no-install-recommends kicad kicad-footprints
           kicad-cli version
 
-      - name: Verify generated KiCad files are current
+      - name: Regenerate KiCad files
         run: |
-          cp battery_monitor/hardware/battery_monitor.kicad_sch /tmp/battery_monitor.kicad_sch.committed
-          cp battery_monitor/hardware/battery_monitor.kicad_pro /tmp/battery_monitor.kicad_pro.committed
-          cp battery_monitor/hardware/BM.kicad_sym /tmp/BM.kicad_sym.committed
-          cp battery_monitor/hardware/sym-lib-table /tmp/sym-lib-table.committed
-          cp battery_monitor/hardware/fp-lib-table /tmp/fp-lib-table.committed
-
           python3 battery_monitor/hardware/tools/generate_schematic.py
-
-          diff -u /tmp/battery_monitor.kicad_sch.committed battery_monitor/hardware/battery_monitor.kicad_sch
-          diff -u /tmp/battery_monitor.kicad_pro.committed battery_monitor/hardware/battery_monitor.kicad_pro
-          diff -u /tmp/BM.kicad_sym.committed battery_monitor/hardware/BM.kicad_sym
-          diff -u /tmp/sym-lib-table.committed battery_monitor/hardware/sym-lib-table
-          diff -u /tmp/fp-lib-table.committed battery_monitor/hardware/fp-lib-table
 
       - name: Validate schematic with KiCad
         id: validate
@@ -56,10 +44,10 @@ jobs:
         run: |
           set +e
           mkdir -p /tmp/kicad-validation
-          cp battery_monitor/hardware/battery_monitor.kicad_sch /tmp/kicad-validation/battery_monitor.kicad_sch
+          schematic=battery_monitor/hardware/battery_monitor.kicad_sch
 
           kicad-cli sch upgrade --force \
-            /tmp/kicad-validation/battery_monitor.kicad_sch \
+            "$schematic" \
             > /tmp/kicad-validation/upgrade.log 2>&1
           upgrade_status=$?
 
@@ -67,7 +55,7 @@ jobs:
             --format json \
             --severity-all \
             --output /tmp/kicad-validation/erc.json \
-            /tmp/kicad-validation/battery_monitor.kicad_sch \
+            "$schematic" \
             > /tmp/kicad-validation/erc-cli.log 2>&1
           erc_status=$?
 
@@ -117,8 +105,9 @@ jobs:
           hide_and_recreate: true
           hide_classify: OUTDATED
 
-      - name: Fail on parser or ERC errors
+      - name: Fail on parser or ERC violations
         if: always()
         run: |
           test "${{ steps.validate.outputs.upgrade_status }}" = "0"
           test "${{ steps.validate.outputs.error_count }}" = "0"
+          test "${{ steps.validate.outputs.warning_count }}" = "0"
