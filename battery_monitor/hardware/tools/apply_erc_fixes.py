@@ -32,4 +32,11 @@ text = text.replace(
     "inst('C','C4','100n',120,42,'Capacitor_SMD:C_0805_2012Metric','','3.3 V HF bypass'); wire(120,37,120,30); wire(120,47,120,52); label('3V3',120,37); label('GND',120,52)",
 )
 
+# Repair the one extra closing parenthesis introduced during the previous
+# source restore. Keep this exact replacement idempotent.
+text = text.replace(
+    "sl.append(f'  (instances (project \"battery_monitor\" (path \"/{ROOT}\" (reference \"{ref}\") (unit 1)))))')",
+    "sl.append(f'  (instances (project \"battery_monitor\" (path \"/{ROOT}\" (reference \"{ref}\") (unit 1))))')",
+)
+
 path.write_text(text)
