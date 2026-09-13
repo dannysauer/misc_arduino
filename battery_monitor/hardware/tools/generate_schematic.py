@@ -19,7 +19,10 @@ def prop(k,v,x,y,rot=0,hide=False):
     return f'(property "{k}" "{v}" (at {x} {y} {rot}) {eff(1.0 if not hide else 0.8, hide)})'
 
 def pin_def(ptype,num,name,x,y,ang):
-    return f'(pin {ptype} line (at {x} {y} {ang}) (length 2.54) (name "{name}" {eff(0.8)}) (number "{num}" {eff(0.8)}))'
+    # KiCad symbol-local Y increases upward while sheet Y increases downward.
+    # The design coordinates below are written in sheet orientation, so mirror
+    # the local Y coordinate and vertical pin angle when embedding the symbol.
+    return f'(pin {ptype} line (at {x} {-y} {(-ang) % 360}) (length 2.54) (name "{name}" {eff(0.8)}) (number "{num}" {eff(0.8)}))'
 
 def libsym(name,ref,pins,w=10,h=8,desc=''):
     lines=[f'(symbol "BM:{name}"','  (pin_names (offset 0.8))','  (in_bom yes)','  (on_board yes)',
