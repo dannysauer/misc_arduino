@@ -3,6 +3,11 @@ from pathlib import Path
 path = Path(__file__).with_name("generate_schematic.py")
 text = path.read_text()
 
+text = text.replace(
+    "LIBS.append(libsym('CONN6','J',[('passive','1','BAT+',5,-6,180),",
+    "LIBS.append(libsym('CONN6','J',[('power_out','1','BAT+',5,-6,180),",
+)
+
 if "libsym('PWRFLAG'" not in text:
     text = text.replace(
         "LIBS.append(libsym('CONN2','J',[('passive','1','1',5,-2,180),('passive','2','2',5,2,180)],w=8,h=8,desc='Two pin connector'))\n",
