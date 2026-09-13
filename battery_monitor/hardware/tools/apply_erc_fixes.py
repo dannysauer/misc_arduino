@@ -22,11 +22,16 @@ text = text.replace(
 
 marker = "for yy in [32.4,34.8,39.6,42]: nc(102,yy)\n"
 flags = (
-    "inst('PWRFLAG','PF1','VIN_PROTECTED_PWR',82,47); wire(82,42,82,52)\n"
+    "inst('PWRFLAG','PF1','VIN_PROTECTED_PWR',82,35); wire(82,30,82,40)\n"
     "inst('PWRFLAG','PF2','GND_PWR',92,57); wire(92,52,92,62)\n"
 )
 if "VIN_PROTECTED_PWR" not in text:
     text = text.replace(marker, marker + flags)
+else:
+    text = text.replace(
+        "inst('PWRFLAG','PF1','VIN_PROTECTED_PWR',82,47); wire(82,42,82,52)",
+        "inst('PWRFLAG','PF1','VIN_PROTECTED_PWR',82,35); wire(82,30,82,40)",
+    )
 
 text = text.replace(
     "inst('C','C3','10u 10V',112,42,'Capacitor_SMD:C_1206_3216Metric','','3.3 V bulk'); wire(112,37,112,30); wire(112,47,112,52); label('GND',112,52)",
@@ -37,8 +42,6 @@ text = text.replace(
     "inst('C','C4','100n',120,42,'Capacitor_SMD:C_0805_2012Metric','','3.3 V HF bypass'); wire(120,37,120,30); wire(120,47,120,52); label('3V3',120,37); label('GND',120,52)",
 )
 
-# Repair the one extra closing parenthesis introduced during the previous
-# source restore. Keep this exact replacement idempotent.
 text = text.replace(
     "sl.append(f'  (instances (project \"battery_monitor\" (path \"/{ROOT}\" (reference \"{ref}\") (unit 1)))))')",
     "sl.append(f'  (instances (project \"battery_monitor\" (path \"/{ROOT}\" (reference \"{ref}\") (unit 1))))')",
