@@ -42,7 +42,7 @@ LIBS.append(libsym('DIODE','D',[('passive','1','A',-5,0,0),('passive','2','K',5,
 LIBS.append(libsym('TVS','D',[('passive','1','1',0,-5,90),('passive','2','2',0,5,270)],w=5,h=4,desc='Bidirectional TVS'))
 LIBS.append(libsym('CLAMP3','D',[('passive','1','GND clamp',0,6,270),('passive','3','SENSE',-6,0,0),('passive','2','3V3 clamp',0,-6,90)],w=6,h=6,desc='BAV199-Q series dual diode used as rail clamp'))
 LIBS.append(libsym('NTC','RT',[('passive','1','1',0,-5,90),('passive','2','2',0,5,270)],w=5,h=3,desc='NTC thermistor'))
-LIBS.append(libsym('CONN6','J',[('passive','1','BAT+',5,-6,180),('passive','2','GND',5,-3.6,180),('passive','3','IGN',5,-1.2,180),('passive','4','DOOR',5,1.2,180),('passive','5','PARK',5,3.6,180),('passive','6','AUX',5,6,180)],w=8,h=18,desc='Vehicle harness connector'))
+LIBS.append(libsym('CONN6','J',[('power_out','1','BAT+',5,-6,180),('passive','2','GND',5,-3.6,180),('passive','3','IGN',5,-1.2,180),('passive','4','DOOR',5,1.2,180),('passive','5','PARK',5,3.6,180),('passive','6','AUX',5,6,180)],w=8,h=18,desc='Vehicle harness connector'))
 LIBS.append(libsym('CONN2','J',[('passive','1','1',5,-2,180),('passive','2','2',5,2,180)],w=8,h=8,desc='Two pin connector'))
 LIBS.append(libsym('PWRFLAG','P',[('power_out','1','PWR_FLAG',0,5,270)],w=4,h=3,desc='ERC power-source marker'))
 LIBS.append(libsym('LDO8','U',[('power_out','1','OUT',10,-6,180),('no_connect','2','DNC',10,-3.6,180),('open_collector','3','PG',10,-1.2,180),('power_in','4','GND',0,9,270),('input','5','EN',-10,6,0),('no_connect','6','NC',10,3.6,180),('output','7','DELAY',10,6,180),('power_in','8','IN',-10,-6,0),('power_in','9','EP',0,12,270)],w=14,h=18,desc='TPS7A1633A-Q1 fixed 3.3 V LDO; pin 9 represents exposed pad'))

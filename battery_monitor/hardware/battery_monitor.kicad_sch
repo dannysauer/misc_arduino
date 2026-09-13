@@ -107,7 +107,7 @@
       (property "Description" "Vehicle harness connector" (at 0 0 0) (effects (font (size 0.8 0.8)) hide))
       (symbol "CONN6_0_1" (rectangle (start -4.0 -9.0) (end 4.0 9.0) (stroke (width 0.254) (type default)) (fill (type background))))
       (symbol "CONN6_1_1"
-        (pin passive line (at 5 6 180) (length 2.54) (name "BAT+" (effects (font (size 0.8 0.8)))) (number "1" (effects (font (size 0.8 0.8)))))
+        (pin power_out line (at 5 6 180) (length 2.54) (name "BAT+" (effects (font (size 0.8 0.8)))) (number "1" (effects (font (size 0.8 0.8)))))
         (pin passive line (at 5 3.6 180) (length 2.54) (name "GND" (effects (font (size 0.8 0.8)))) (number "2" (effects (font (size 0.8 0.8)))))
         (pin passive line (at 5 1.2 180) (length 2.54) (name "IGN" (effects (font (size 0.8 0.8)))) (number "3" (effects (font (size 0.8 0.8)))))
         (pin passive line (at 5 -1.2 180) (length 2.54) (name "DOOR" (effects (font (size 0.8 0.8)))) (number "4" (effects (font (size 0.8 0.8)))))
