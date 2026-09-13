@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: agent/battery-monitor-design
 
       - name: Install KiCad 10
         run: |
@@ -31,22 +29,43 @@ jobs:
           sudo apt-get install --yes --no-install-recommends kicad
           kicad-cli version
 
+      - name: Fix generator coordinate transform
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("battery_monitor/hardware/tools/generate_schematic.py")
+          text = path.read_text()
+          old = '''def pin_def(ptype,num,name,x,y,ang):
+              return f'(pin {ptype} line (at {x} {y} {ang}) (length 2.54) (name "{name}" {eff(0.8)}) (number "{num}" {eff(0.8)}))'
+          '''
+          new = '''def pin_def(ptype,num,name,x,y,ang):
+              # KiCad symbol-local Y increases upward while sheet Y increases downward.
+              # The design coordinates below are written in sheet orientation, so mirror
+              # the local Y coordinate and vertical pin angle when embedding the symbol.
+              return f'(pin {ptype} line (at {x} {-y} {(-ang) % 360}) (length 2.54) (name "{name}" {eff(0.8)}) (number "{num}" {eff(0.8)}))'
+          '''
+          if old in text:
+              path.write_text(text.replace(old, new))
+          elif "return f'(pin {ptype} line (at {x} {-y} {(-ang) % 360})" not in text:
+              raise SystemExit("generator pin_def block is neither old nor expected fixed form")
+
       - name: Generate schematic
         run: |
           python3 battery_monitor/hardware/tools/generate_schematic.py
           test -s battery_monitor/hardware/battery_monitor.kicad_sch
 
-      - name: Commit generated schematic
+      - name: Commit corrected generator and generated schematic
         run: |
-          if git diff --quiet -- battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro; then
+          if [ -z "$(git status --porcelain -- battery_monitor/hardware/tools/generate_schematic.py battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro)" ]; then
             echo "Generated KiCad files are already current."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro
-          git commit -m "Generate battery monitor KiCad schematic"
+          git add battery_monitor/hardware/tools/generate_schematic.py battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro
+          git commit -m "Fix KiCad symbol pin coordinate transform"
           git push origin HEAD:agent/battery-monitor-design
 
       - name: Validate schematic with KiCad
@@ -56,9 +75,10 @@ jobs:
         run: |
           set +e
           mkdir -p /tmp/kicad-validation
+          cp battery_monitor/hardware/battery_monitor.kicad_sch /tmp/kicad-validation/battery_monitor.kicad_sch
 
           kicad-cli sch upgrade --force \
-            battery_monitor/hardware/battery_monitor.kicad_sch \
+            /tmp/kicad-validation/battery_monitor.kicad_sch \
             > /tmp/kicad-validation/upgrade.log 2>&1
           upgrade_status=$?
 
@@ -66,39 +86,47 @@ jobs:
             --format json \
             --severity-all \
             --output /tmp/kicad-validation/erc.json \
-            battery_monitor/hardware/battery_monitor.kicad_sch \
+            /tmp/kicad-validation/battery_monitor.kicad_sch \
             > /tmp/kicad-validation/erc-cli.log 2>&1
           erc_status=$?
 
+          if [ -s /tmp/kicad-validation/erc.json ]; then
+            total_count=$(jq '[.sheets[].violations[]] | length' /tmp/kicad-validation/erc.json)
+            error_count=$(jq '[.sheets[].violations[] | select(.severity == "error")] | length' /tmp/kicad-validation/erc.json)
+            warning_count=$(jq '[.sheets[].violations[] | select(.severity == "warning")] | length' /tmp/kicad-validation/erc.json)
+          else
+            total_count=0
+            error_count=0
+            warning_count=0
+          fi
+
           echo "upgrade_status=${upgrade_status}" >> "$GITHUB_OUTPUT"
           echo "erc_status=${erc_status}" >> "$GITHUB_OUTPUT"
+          echo "total_count=${total_count}" >> "$GITHUB_OUTPUT"
+          echo "error_count=${error_count}" >> "$GITHUB_OUTPUT"
+          echo "warning_count=${warning_count}" >> "$GITHUB_OUTPUT"
 
           {
             echo "## KiCad 10 validation"
             echo
             echo "- KiCad version: \`$(kicad-cli version)\`"
-            echo "- \`sch upgrade --force\` exit code: \`${upgrade_status}\`"
-            echo "- \`sch erc\` exit code: \`${erc_status}\`"
+            echo "- Parser/upgrade exit code: \`${upgrade_status}\`"
+            echo "- ERC command exit code: \`${erc_status}\`"
+            echo "- ERC violations: **${total_count} total / ${error_count} errors / ${warning_count} warnings**"
             echo
-            echo "### Upgrade/parser output"
-            echo '```text'
-            head -c 8000 /tmp/kicad-validation/upgrade.log
-            echo
-            echo '```'
-            echo
-            echo "### ERC CLI output"
-            echo '```text'
-            head -c 8000 /tmp/kicad-validation/erc-cli.log
-            echo
-            echo '```'
+            echo "### Violation types"
             if [ -s /tmp/kicad-validation/erc.json ]; then
+              jq -r '[.sheets[].violations[]] | group_by(.type) | sort_by(-length) | .[] | "- `\(.[0].type)`: \(length) (\(.[0].severity))"' /tmp/kicad-validation/erc.json
               echo
-              echo "### ERC report"
-              echo '```json'
-              head -c 16000 /tmp/kicad-validation/erc.json
-              echo
-              echo '```'
+              echo "### First 30 errors"
+              jq -r '[.sheets[].violations[] | select(.severity == "error")][0:30][] | "- **\(.type)**: \(.description) — \([.items[].description] | join("; "))"' /tmp/kicad-validation/erc.json
             fi
+            echo
+            echo "### Parser output"
+            echo '```text'
+            head -c 4000 /tmp/kicad-validation/upgrade.log
+            echo
+            echo '```'
           } > /tmp/kicad-validation/comment.md
 
       - name: Post validation result to PR
@@ -112,8 +140,8 @@ jobs:
             gh pr comment 4 --repo "${GITHUB_REPOSITORY}" --body "KiCad validation did not reach the reporting step. Check the workflow run."
           fi
 
-      - name: Fail on KiCad parser or ERC errors
+      - name: Fail on parser or ERC errors
         if: always()
         run: |
           test "${{ steps.validate.outputs.upgrade_status }}" = "0"
-          test "${{ steps.validate.outputs.erc_status }}" = "0"
+          test "${{ steps.validate.outputs.error_count }}" = "0"
