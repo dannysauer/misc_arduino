@@ -36,3 +36,9 @@ libraries/Chronos/
 libraries/Firmata/
 libraries/Rtc_by_Makuna/
 
+# Generated battery monitor KiCad files
+battery_monitor/hardware/battery_monitor.kicad_sch
+battery_monitor/hardware/battery_monitor.kicad_pro
+battery_monitor/hardware/BM.kicad_sym
+battery_monitor/hardware/sym-lib-table
+battery_monitor/hardware/fp-lib-table

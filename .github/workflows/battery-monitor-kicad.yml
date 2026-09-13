@@ -1,0 +1,129 @@
+name: Battery monitor KiCad validation
+
+on:
+  push:
+    branches:
+      - agent/battery-monitor-design
+    paths:
+      - battery_monitor/hardware/**
+      - .github/workflows/battery-monitor-kicad.yml
+  workflow_dispatch:
+
+concurrency:
+  group: battery-monitor-kicad-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install KiCad 10
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends kicad kicad-footprints
+          kicad-cli version
+
+      - name: Generate and verify deterministic output
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/battery-monitor-gen-a/tools /tmp/battery-monitor-gen-b/tools
+          cp battery_monitor/hardware/tools/generate_schematic.py /tmp/battery-monitor-gen-a/tools/
+          cp battery_monitor/hardware/tools/generate_schematic.py /tmp/battery-monitor-gen-b/tools/
+
+          python3 /tmp/battery-monitor-gen-a/tools/generate_schematic.py
+          python3 /tmp/battery-monitor-gen-b/tools/generate_schematic.py
+
+          for file in \
+            battery_monitor.kicad_sch \
+            battery_monitor.kicad_pro \
+            BM.kicad_sym \
+            sym-lib-table \
+            fp-lib-table
+          do
+            cmp "/tmp/battery-monitor-gen-a/${file}" "/tmp/battery-monitor-gen-b/${file}"
+          done
+
+      - name: Validate schematic with KiCad
+        id: validate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          mkdir -p /tmp/kicad-validation
+          schematic=/tmp/battery-monitor-gen-a/battery_monitor.kicad_sch
+
+          kicad-cli sch upgrade --force \
+            "$schematic" \
+            > /tmp/kicad-validation/upgrade.log 2>&1
+          upgrade_status=$?
+
+          kicad-cli sch erc \
+            --format json \
+            --severity-all \
+            --output /tmp/kicad-validation/erc.json \
+            "$schematic" \
+            > /tmp/kicad-validation/erc-cli.log 2>&1
+          erc_status=$?
+
+          if [ -s /tmp/kicad-validation/erc.json ]; then
+            total_count=$(jq '[.sheets[].violations[]] | length' /tmp/kicad-validation/erc.json)
+            error_count=$(jq '[.sheets[].violations[] | select(.severity == "error")] | length' /tmp/kicad-validation/erc.json)
+            warning_count=$(jq '[.sheets[].violations[] | select(.severity == "warning")] | length' /tmp/kicad-validation/erc.json)
+          else
+            total_count=0
+            error_count=0
+            warning_count=0
+          fi
+
+          echo "upgrade_status=${upgrade_status}" >> "$GITHUB_OUTPUT"
+          echo "erc_status=${erc_status}" >> "$GITHUB_OUTPUT"
+          echo "total_count=${total_count}" >> "$GITHUB_OUTPUT"
+          echo "error_count=${error_count}" >> "$GITHUB_OUTPUT"
+          echo "warning_count=${warning_count}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## KiCad 10 validation"
+            echo
+            echo "- KiCad version: \`$(kicad-cli version)\`"
+            echo "- Parser/upgrade exit code: \`${upgrade_status}\`"
+            echo "- ERC command exit code: \`${erc_status}\`"
+            echo "- ERC violations: **${total_count} total / ${error_count} errors / ${warning_count} warnings**"
+            echo
+            echo "### Violation types"
+            if [ -s /tmp/kicad-validation/erc.json ]; then
+              jq -r '[.sheets[].violations[]] | group_by(.type) | sort_by(-length) | .[] | "- `\(.[0].type)`: \(length) (\(.[0].severity))"' /tmp/kicad-validation/erc.json
+              echo
+              echo "### First 30 errors"
+              jq -r '[.sheets[].violations[] | select(.severity == "error")][0:30][] | "- **\(.type)**: \(.description) — \([.items[].description] | join("; "))"' /tmp/kicad-validation/erc.json
+              echo
+              echo "### First 30 warnings"
+              jq -r '[.sheets[].violations[] | select(.severity == "warning")][0:30][] | "- **\(.type)**: \(.description) — \([.items[] | "\(.description) @ (\(.pos.x), \(.pos.y))"] | join("; "))"' /tmp/kicad-validation/erc.json
+            fi
+          } > /tmp/kicad-validation/comment.md
+
+      - name: Post validation result to PR
+        if: always() && github.event_name != 'workflow_dispatch'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: battery-monitor-kicad
+          number: 4
+          path: /tmp/kicad-validation/comment.md
+          hide_and_recreate: true
+          hide_classify: OUTDATED
+
+      - name: Fail on parser or ERC violations
+        if: always()
+        run: |
+          test "${{ steps.validate.outputs.upgrade_status }}" = "0"
+          test "${{ steps.validate.outputs.error_count }}" = "0"
+          test "${{ steps.validate.outputs.warning_count }}" = "0"

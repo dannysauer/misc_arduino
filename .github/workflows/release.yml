@@ -1,0 +1,225 @@
+name: Release projects
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      project:
+        description: Top-level project directory to release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  detect-projects:
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.detect.outputs.projects }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Detect releasable projects
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_PROJECT: ${{ github.event.inputs.project || '' }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          root = Path('.')
+          releasable = {
+              path.parent.parent.name
+              for path in root.glob('*/.release/build.sh')
+              if path.is_file()
+          }
+
+          if not releasable:
+              print('No releasable projects found.', file=sys.stderr)
+              raise SystemExit(1)
+
+          if os.environ['EVENT_NAME'] == 'workflow_dispatch':
+              requested = os.environ['MANUAL_PROJECT'].strip()
+              if requested not in releasable:
+                  choices = ', '.join(sorted(releasable))
+                  print(f'Unknown project: {requested}. Releasable projects: {choices}', file=sys.stderr)
+                  raise SystemExit(1)
+              selected = [requested]
+          else:
+              before = os.environ.get('BEFORE_SHA', '').strip()
+              head = os.environ['HEAD_SHA'].strip()
+              if before and set(before) != {'0'}:
+                  diff_range = [before, head]
+              else:
+                  diff_range = [f'{head}^', head]
+
+              changed = subprocess.run(
+                  ['git', 'diff', '--name-only', *diff_range],
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              ).stdout.splitlines()
+
+              selected = sorted({
+                  parts[0]
+                  for changed_path in changed
+                  if (parts := Path(changed_path).parts)
+                  and parts[0] in releasable
+              })
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'projects={json.dumps(selected)}\n')
+          PY
+
+      - name: No project changes detected
+        if: steps.detect.outputs.projects == '[]'
+        run: echo 'No releasable project changes detected.'
+
+  release:
+    needs: detect-projects
+    if: needs.detect-projects.outputs.projects != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJson(needs.detect-projects.outputs.projects) }}
+    concurrency:
+      group: release-${{ matrix.project }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Find previous project tag
+        id: previous
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          set -euo pipefail
+          latest_tag="$(git tag -l "${PROJECT}_[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname | head -n 1)"
+          if [[ -n "$latest_tag" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve semantic version
+        id: semantic
+        if: steps.previous.outputs.exists == 'true'
+        uses: PaulHatch/semantic-version@9f72830310d5ed81233b641ee59253644cd8a8fc # v6.0.2
+        with:
+          tag_prefix: "${{ matrix.project }}_"
+          change_path: "${{ matrix.project }}"
+          major_pattern: "#major"
+          minor_pattern: "#minor"
+          ignore_commits_pattern: "#none"
+          search_commit_body: "true"
+
+      - name: Resolve release version
+        id: version
+        env:
+          PROJECT: ${{ matrix.project }}
+          HAS_PREVIOUS: ${{ steps.previous.outputs.exists }}
+          SEMANTIC_VERSION: ${{ steps.semantic.outputs.version }}
+          SEMANTIC_TAG: ${{ steps.semantic.outputs.version_tag }}
+          SEMANTIC_CHANGED: ${{ steps.semantic.outputs.changed }}
+        run: |
+          set -euo pipefail
+          if [[ "$HAS_PREVIOUS" == "true" ]]; then
+            version="$SEMANTIC_VERSION"
+            tag="$SEMANTIC_TAG"
+            changed="$SEMANTIC_CHANGED"
+          else
+            version="1.0.0"
+            tag="${PROJECT}_${version}"
+            changed="true"
+          fi
+
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "changed=$changed"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Skip unchanged manual release
+        if: github.event_name == 'workflow_dispatch' && steps.version.outputs.changed != 'true'
+        run: echo 'No project changes exist since the previous release; nothing to publish.'
+
+      - name: Build project release assets
+        if: steps.version.outputs.changed == 'true'
+        id: build
+        env:
+          PROJECT: ${{ matrix.project }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          asset_dir="$RUNNER_TEMP/release-assets/$PROJECT"
+          rm -rf "$asset_dir"
+          mkdir -p "$asset_dir"
+
+          bash "$PROJECT/.release/build.sh" "$VERSION" "$asset_dir"
+
+          if ! find "$asset_dir" -maxdepth 1 -type f -print -quit | grep -q .; then
+            echo "$PROJECT/.release/build.sh did not create any release assets." >&2
+            exit 1
+          fi
+
+          echo "asset_dir=$asset_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Generate project release notes
+        if: steps.version.outputs.changed == 'true'
+        id: notes
+        env:
+          PROJECT: ${{ matrix.project }}
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes_file="$RUNNER_TEMP/release-notes-${PROJECT}.md"
+          log_args=()
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            log_args+=("${PREVIOUS_TAG}..HEAD")
+          fi
+
+          changes="$(git log "${log_args[@]}" --pretty=format:'- %s (%h)' -- "$PROJECT")"
+          {
+            echo "## Changes"
+            if [[ -n "$changes" ]]; then
+              echo "$changes"
+            else
+              echo "_No project changes detected._"
+            fi
+          } > "$notes_file"
+
+          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        if: steps.version.outputs.changed == 'true'
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ matrix.project }} ${{ steps.version.outputs.version }}
+          body_path: ${{ steps.notes.outputs.notes_file }}
+          files: ${{ steps.build.outputs.asset_dir }}/*
+          fail_on_unmatched_files: true
+          overwrite_files: true
