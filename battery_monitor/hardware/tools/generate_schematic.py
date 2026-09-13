@@ -149,8 +149,13 @@ inst('MCU','U3','MDBT50Q-1MV2 (logical symbol)',225,110,'','https://www.raytac.c
 wire(225,88,225,82); label('3V3',225,82); wire(225,132,225,138); label('GND',225,138)
 for net,yy in [('IGN_WAKE',95),('DOOR_WAKE',99),('PARK_WAKE',103),('AUX_WAKE',107),('VBAT_ADC',113),('TEMP_BOARD_ADC',117),('TEMP_EXT_ADC',121),('REMOTE_ENABLE',125)]:
     wire(209,yy,203,yy); label(net,203,yy)
-for net,yy in [('TEMP_BOARD_EXCITE',113),('TEMP_EXT_EXCITE',117),('REMOTE_START_OUT_DNP',121),('SWDIO',99),('SWDCLK',95),('RESET_N',103),('XL1',125),('XL2',129)]:
+for net,yy in [('TEMP_BOARD_EXCITE',113),('TEMP_EXT_EXCITE',117)]:
     wire(241,yy,247,yy); label(net,247,yy)
+# These module pins are intentionally unused on the current prototype.
+# SWD/reset will be revisited with the programming connector, XL1/XL2 use the
+# nRF52 internal LFCLK path for now, and the remote-start driver is DNP.
+for yy in [121,99,95,103,125,129]:
+    nc(241,yy)
 
 text('TEMPERATURE',120,150,1.4)
 label('TEMP_BOARD_EXCITE',120,160); wire(120,160,125,160); inst('R','R40','10k 1%',130,160,'Resistor_SMD:R_0805_2012Metric'); wire(135,160,140,160); label('TEMP_BOARD_ADC',140,160)
