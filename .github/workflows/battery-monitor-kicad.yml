@@ -1,0 +1,104 @@
+name: Battery monitor KiCad validation
+
+on:
+  push:
+    branches:
+      - agent/battery-monitor-design
+    paths:
+      - battery_monitor/hardware/**
+      - .github/workflows/battery-monitor-kicad.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install KiCad 10
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends kicad
+          kicad-cli version
+
+      - name: Generate schematic
+        run: |
+          python3 battery_monitor/hardware/tools/generate_schematic.py
+          test -s battery_monitor/hardware/battery_monitor.kicad_sch
+
+      - name: Validate schematic with KiCad
+        id: validate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          mkdir -p /tmp/kicad-validation
+
+          kicad-cli sch upgrade --force \
+            battery_monitor/hardware/battery_monitor.kicad_sch \
+            > /tmp/kicad-validation/upgrade.log 2>&1
+          upgrade_status=$?
+
+          kicad-cli sch erc \
+            --format json \
+            --severity-all \
+            --output /tmp/kicad-validation/erc.json \
+            battery_monitor/hardware/battery_monitor.kicad_sch \
+            > /tmp/kicad-validation/erc-cli.log 2>&1
+          erc_status=$?
+
+          echo "upgrade_status=${upgrade_status}" >> "$GITHUB_OUTPUT"
+          echo "erc_status=${erc_status}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## KiCad 10 validation"
+            echo
+            echo "- KiCad version: \`$(kicad-cli version)\`"
+            echo "- \`sch upgrade --force\` exit code: \`${upgrade_status}\`"
+            echo "- \`sch erc\` exit code: \`${erc_status}\`"
+            echo
+            echo "### Upgrade/parser output"
+            echo '```text'
+            head -c 8000 /tmp/kicad-validation/upgrade.log
+            echo
+            echo '```'
+            echo
+            echo "### ERC CLI output"
+            echo '```text'
+            head -c 8000 /tmp/kicad-validation/erc-cli.log
+            echo
+            echo '```'
+            if [ -s /tmp/kicad-validation/erc.json ]; then
+              echo
+              echo "### ERC report"
+              echo '```json'
+              head -c 16000 /tmp/kicad-validation/erc.json
+              echo
+              echo '```'
+            fi
+          } > /tmp/kicad-validation/comment.md
+
+      - name: Post validation result to PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f /tmp/kicad-validation/comment.md ]; then
+            gh pr comment 4 --repo "${GITHUB_REPOSITORY}" --body-file /tmp/kicad-validation/comment.md
+          else
+            gh pr comment 4 --repo "${GITHUB_REPOSITORY}" --body "KiCad validation did not reach the reporting step. Check the workflow run."
+          fi
+
+      - name: Fail on KiCad parser or ERC errors
+        if: always()
+        run: |
+          test "${{ steps.validate.outputs.upgrade_status }}" = "0"
+          test "${{ steps.validate.outputs.erc_status }}" = "0"
