@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
   issues: write
 
@@ -29,25 +29,15 @@ jobs:
           sudo apt-get install --yes --no-install-recommends kicad
           kicad-cli version
 
-      - name: Apply generator/ERC repairs
-        run: python3 battery_monitor/hardware/tools/apply_erc_fixes.py
-
-      - name: Generate schematic
+      - name: Verify generated KiCad files are current
         run: |
+          cp battery_monitor/hardware/battery_monitor.kicad_sch /tmp/battery_monitor.kicad_sch.committed
+          cp battery_monitor/hardware/battery_monitor.kicad_pro /tmp/battery_monitor.kicad_pro.committed
+
           python3 battery_monitor/hardware/tools/generate_schematic.py
-          test -s battery_monitor/hardware/battery_monitor.kicad_sch
 
-      - name: Commit corrected generator and generated schematic
-        run: |
-          if [ -z "$(git status --porcelain -- battery_monitor/hardware/tools/generate_schematic.py battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro)" ]; then
-            echo "Generated KiCad files are already current."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add battery_monitor/hardware/tools/generate_schematic.py battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro
-          git commit -m "Apply KiCad ERC fixes"
-          git push origin HEAD:agent/battery-monitor-design
+          diff -u /tmp/battery_monitor.kicad_sch.committed battery_monitor/hardware/battery_monitor.kicad_sch
+          diff -u /tmp/battery_monitor.kicad_pro.committed battery_monitor/hardware/battery_monitor.kicad_pro
 
       - name: Validate schematic with KiCad
         id: validate
@@ -57,22 +47,36 @@ jobs:
           set +e
           mkdir -p /tmp/kicad-validation
           cp battery_monitor/hardware/battery_monitor.kicad_sch /tmp/kicad-validation/battery_monitor.kicad_sch
-          kicad-cli sch upgrade --force /tmp/kicad-validation/battery_monitor.kicad_sch > /tmp/kicad-validation/upgrade.log 2>&1
+
+          kicad-cli sch upgrade --force \
+            /tmp/kicad-validation/battery_monitor.kicad_sch \
+            > /tmp/kicad-validation/upgrade.log 2>&1
           upgrade_status=$?
-          kicad-cli sch erc --format json --severity-all --output /tmp/kicad-validation/erc.json /tmp/kicad-validation/battery_monitor.kicad_sch > /tmp/kicad-validation/erc-cli.log 2>&1
+
+          kicad-cli sch erc \
+            --format json \
+            --severity-all \
+            --output /tmp/kicad-validation/erc.json \
+            /tmp/kicad-validation/battery_monitor.kicad_sch \
+            > /tmp/kicad-validation/erc-cli.log 2>&1
           erc_status=$?
+
           if [ -s /tmp/kicad-validation/erc.json ]; then
             total_count=$(jq '[.sheets[].violations[]] | length' /tmp/kicad-validation/erc.json)
             error_count=$(jq '[.sheets[].violations[] | select(.severity == "error")] | length' /tmp/kicad-validation/erc.json)
             warning_count=$(jq '[.sheets[].violations[] | select(.severity == "warning")] | length' /tmp/kicad-validation/erc.json)
           else
-            total_count=0; error_count=0; warning_count=0
+            total_count=0
+            error_count=0
+            warning_count=0
           fi
+
           echo "upgrade_status=${upgrade_status}" >> "$GITHUB_OUTPUT"
           echo "erc_status=${erc_status}" >> "$GITHUB_OUTPUT"
           echo "total_count=${total_count}" >> "$GITHUB_OUTPUT"
           echo "error_count=${error_count}" >> "$GITHUB_OUTPUT"
           echo "warning_count=${warning_count}" >> "$GITHUB_OUTPUT"
+
           {
             echo "## KiCad 10 validation"
             echo
