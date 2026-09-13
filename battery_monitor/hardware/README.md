@@ -25,3 +25,9 @@ Those files are intentionally not committed. CI generates two independent copies
 The generated schematic includes the power/protection path, four automotive wake inputs, battery ADC divider, temperature channels, remote-start-enable sense input, and a logical nRF52840 module symbol. The future remote-start driver is deliberately not implemented yet.
 
 `VALIDATION.md` records the current validation state and the work that still has to happen before PCB layout. The electrical reasoning behind the component values lives in `FRONT_END_ANALYSIS.md`; `SCHEMATIC.md` is the readable circuit walkthrough; and `PROTOTYPE_BOM.md` is the purchase-oriented part list.
+
+## Release artifact
+
+When a `battery_monitor` change reaches `main`, the repository release workflow generates the KiCad project and publishes it as `battery_monitor-kicad-<version>.zip` on a `battery_monitor_<version>` GitHub Release. The archive contains the generated schematic, project file, symbol library, library tables, and this README, so you can open the released project without running the generator locally.
+
+Release artifacts are generated from the tagged commit. The generated KiCad files remain intentionally uncommitted.
