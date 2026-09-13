@@ -1,43 +1,36 @@
 # Hardware validation status
 
-The files in this directory are an early prototype schematic, not a released board design.
+The files in this directory describe an early prototype schematic, not a released board design.
 
 ## Checks completed
 
-The schematic generator currently verifies:
+The generator verifies balanced KiCad S-expression syntax and deterministic UUID generation. CI also runs the generator twice in separate directories and compares every generated file byte-for-byte.
 
-- balanced KiCad S-expression syntax
-- deterministic UUID generation
-- stable output: two consecutive generator runs produce byte-for-byte identical project and schematic files
-- unique schematic reference designators
-- no generated zero-length wires
-- expected counts of symbols, wires, and net labels
+GitHub Actions currently installs KiCad 10.0.6, generates the project on demand, upgrades the schematic to the current KiCad format, and runs ERC with all severities enabled.
 
-The current generated-file hashes are:
+The current result is:
 
 ```text
-battery_monitor.kicad_sch  a57e26d75e7c7469461b7d2926ae4e945eefa7c119d1b735781165c405217daa
-battery_monitor.kicad_pro  3319749b7ba1d4b7eb5cc83aed310ab91bf45f98b87fe2468c770c821f109be7
+0 total ERC violations
+0 errors
+0 warnings
 ```
 
-These hashes are useful only as a regression check for this revision. Saving the project in KiCad will legitimately rewrite metadata and change them.
+The warning cleanup was done at the source rather than with blanket exclusions. The generator now emits schematic geometry on KiCad's 50 mil connection grid, registers the local `BM` symbol library and standard footprint libraries, marks intentionally unused MCU pins with explicit no-connects, and omits two redundant capacitor wire stubs that ended without a connection.
 
 ## Checks still required
 
-This environment does not currently have a working KiCad installation, so the generated schematic has **not** yet been opened by Eeschema or checked with `kicad-cli sch erc`.
+ERC is clean, but the prototype is not ready for PCB layout yet. Before layout:
 
-Before PCB layout, open the project in the current KiCad release and:
-
-1. confirm every custom symbol renders correctly
+1. confirm every custom symbol renders correctly in the KiCad GUI
 2. verify the logical Raytac module pin assignments against the selected module datasheet
-3. replace the logical Raytac symbol with a complete production symbol/footprint
-4. run ERC and review every warning rather than blanket-excluding errors
-5. verify every assigned footprint against the actual manufacturer package
-6. check resistor working-voltage and pulse ratings
-7. check capacitor voltage derating
-8. verify BAV199-Q orientation and pin mapping
-9. review all connector pin numbers against the chosen connector family
-10. save the project in KiCad and commit the normalized files
+3. replace the logical Raytac symbol with a complete production symbol and footprint
+4. verify every assigned footprint against the actual manufacturer package
+5. check resistor working-voltage and pulse ratings
+6. check capacitor voltage derating
+7. verify BAV199-Q orientation and pin mapping
+8. review all connector pin numbers against the chosen connector family
+9. resolve the battery ADC divider only after checking the nRF52840 SAADC limits against Nordic's primary documentation
 
 ## Bench validation required before vehicle installation
 

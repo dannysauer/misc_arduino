@@ -33,9 +33,25 @@ jobs:
           sudo apt-get install --yes --no-install-recommends kicad kicad-footprints
           kicad-cli version
 
-      - name: Regenerate KiCad files
+      - name: Generate and verify deterministic output
         run: |
-          python3 battery_monitor/hardware/tools/generate_schematic.py
+          set -euo pipefail
+          mkdir -p /tmp/battery-monitor-gen-a/tools /tmp/battery-monitor-gen-b/tools
+          cp battery_monitor/hardware/tools/generate_schematic.py /tmp/battery-monitor-gen-a/tools/
+          cp battery_monitor/hardware/tools/generate_schematic.py /tmp/battery-monitor-gen-b/tools/
+
+          python3 /tmp/battery-monitor-gen-a/tools/generate_schematic.py
+          python3 /tmp/battery-monitor-gen-b/tools/generate_schematic.py
+
+          for file in \
+            battery_monitor.kicad_sch \
+            battery_monitor.kicad_pro \
+            BM.kicad_sym \
+            sym-lib-table \
+            fp-lib-table
+          do
+            cmp "/tmp/battery-monitor-gen-a/${file}" "/tmp/battery-monitor-gen-b/${file}"
+          done
 
       - name: Validate schematic with KiCad
         id: validate
@@ -44,7 +60,7 @@ jobs:
         run: |
           set +e
           mkdir -p /tmp/kicad-validation
-          schematic=battery_monitor/hardware/battery_monitor.kicad_sch
+          schematic=/tmp/battery-monitor-gen-a/battery_monitor.kicad_sch
 
           kicad-cli sch upgrade --force \
             "$schematic" \
