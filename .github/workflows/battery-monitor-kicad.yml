@@ -9,6 +9,10 @@ on:
       - .github/workflows/battery-monitor-kicad.yml
   workflow_dispatch:
 
+concurrency:
+  group: battery-monitor-kicad-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
