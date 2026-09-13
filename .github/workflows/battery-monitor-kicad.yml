@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   issues: write
 
@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: agent/battery-monitor-design
 
       - name: Install KiCad 10
         run: |
@@ -33,6 +35,19 @@ jobs:
         run: |
           python3 battery_monitor/hardware/tools/generate_schematic.py
           test -s battery_monitor/hardware/battery_monitor.kicad_sch
+
+      - name: Commit generated schematic
+        run: |
+          if git diff --quiet -- battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro; then
+            echo "Generated KiCad files are already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add battery_monitor/hardware/battery_monitor.kicad_sch battery_monitor/hardware/battery_monitor.kicad_pro
+          git commit -m "Generate battery monitor KiCad schematic"
+          git push origin HEAD:agent/battery-monitor-design
 
       - name: Validate schematic with KiCad
         id: validate
