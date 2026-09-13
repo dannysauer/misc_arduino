@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "BM")(type "KiCad")(uri "${KIPRJMOD}/BM.kicad_sym")(options "")(descr "Battery monitor generated symbols"))
+)

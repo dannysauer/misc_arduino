@@ -9,6 +9,14 @@ def u():
     return str(uuid.uuid5(NAMESPACE, f"battery-monitor-{_counter}"))
 ROOT = u()
 
+GRID_MM = 1.27  # 50 mil KiCad schematic connection grid
+
+def grid(v):
+    # Design coordinates are logical grid units.  Round legacy fractional
+    # placements to the nearest connection point, then emit millimeters.
+    value = round(v) * GRID_MM
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
 def eff(size=1.27, hide=False, justify=None):
     s=f'(effects (font (size {size} {size}))'
     if justify: s+=f' (justify {justify})'
@@ -16,19 +24,19 @@ def eff(size=1.27, hide=False, justify=None):
     return s+')'
 
 def prop(k,v,x,y,rot=0,hide=False):
-    return f'(property "{k}" "{v}" (at {x} {y} {rot}) {eff(1.0 if not hide else 0.8, hide)})'
+    return f'(property "{k}" "{v}" (at {grid(x)} {grid(y)} {rot}) {eff(1.0 if not hide else 0.8, hide)})'
 
 def pin_def(ptype,num,name,x,y,ang):
     # KiCad symbol-local Y increases upward while sheet Y increases downward.
     # The design coordinates below are written in sheet orientation, so mirror
     # the local Y coordinate and vertical pin angle when embedding the symbol.
-    return f'(pin {ptype} line (at {x} {-y} {(-ang) % 360}) (length 2.54) (name "{name}" {eff(0.8)}) (number "{num}" {eff(0.8)}))'
+    return f'(pin {ptype} line (at {grid(x)} {grid(-y)} {(-ang) % 360}) (length 2.54) (name "{name}" {eff(0.8)}) (number "{num}" {eff(0.8)}))'
 
 def libsym(name,ref,pins,w=10,h=8,desc=''):
     lines=[f'(symbol "BM:{name}"','  (pin_names (offset 0.8))','  (in_bom yes)','  (on_board yes)',
            f'  {prop("Reference",ref,0,h/2+2)}',f'  {prop("Value",name,0,-h/2-2)}',
            f'  {prop("Footprint","",0,0,hide=True)}',f'  {prop("Datasheet","",0,0,hide=True)}',f'  {prop("Description",desc,0,0,hide=True)}',
-           f'  (symbol "{name}_0_1" (rectangle (start {-w/2} {-h/2}) (end {w/2} {h/2}) (stroke (width 0.254) (type default)) (fill (type background))))',
+           f'  (symbol "{name}_0_1" (rectangle (start {grid(-w/2)} {grid(-h/2)}) (end {grid(w/2)} {grid(h/2)}) (stroke (width 0.254) (type default)) (fill (type background))))',
            f'  (symbol "{name}_1_1"']
     for p in pins:
         lines.append('    '+pin_def(*p))
@@ -66,17 +74,17 @@ def inst(lib,ref,val,x,y,foot='',datasheet='',desc='',dnp='no'):
     ls=next(s for s in LIBS if s.startswith(f'(symbol "BM:{lib}"'))
     nums=re.findall(r'\(number "([^"]+)"',ls)
     plist=[prop('Reference',ref,x,y-5),prop('Value',val,x,y+5),prop('Footprint',foot,x,y,hide=True),prop('Datasheet',datasheet,x,y,hide=True),prop('Description',desc,x,y,hide=True)]
-    sl=[f'(symbol (lib_id "BM:{lib}") (at {x} {y} 0) (unit 1) (in_bom yes) (on_board yes) (uuid {sid})']
+    sl=[f'(symbol (lib_id "BM:{lib}") (at {grid(x)} {grid(y)} 0) (unit 1) (in_bom yes) (on_board yes) (uuid {sid})']
     sl += ['  '+p for p in plist]
     for num in nums: sl.append(f'  (pin "{num}" (uuid {u()}))')
     sl.append(f'  (instances (project "battery_monitor" (path "/{ROOT}" (reference "{ref}") (unit 1))))')
     sl.append(')')
     symbols.append('\n'.join(sl)); return sid
 
-def wire(x1,y1,x2,y2): wires.append(f'(wire (pts (xy {x1} {y1}) (xy {x2} {y2})) (stroke (width 0) (type default)) (uuid {u()}))')
-def label(name,x,y,rot=0): labels.append(f'(label "{name}" (at {x} {y} {rot}) {eff(1.0)} (uuid {u()}))')
-def nc(x,y): ncs.append(f'(no_connect (at {x} {y}) (uuid {u()}))')
-def text(s,x,y,size=1.27): texts.append(f'(text "{s}" (at {x} {y} 0) {eff(size)} (uuid {u()}))')
+def wire(x1,y1,x2,y2): wires.append(f'(wire (pts (xy {grid(x1)} {grid(y1)}) (xy {grid(x2)} {grid(y2)})) (stroke (width 0) (type default)) (uuid {u()}))')
+def label(name,x,y,rot=0): labels.append(f'(label "{name}" (at {grid(x)} {grid(y)} {rot}) {eff(1.0)} (uuid {u()}))')
+def nc(x,y): ncs.append(f'(no_connect (at {grid(x)} {grid(y)}) (uuid {u()}))')
+def text(s,x,y,size=1.27): texts.append(f'(text "{s}" (at {grid(x)} {grid(y)} 0) {eff(size)} (uuid {u()}))')
 
 inst('CONN6','J1','VEHICLE',20,110,desc='BAT+, ground, ignition, door/courtesy, parking lights, spare input')
 for name,yy in [('RAW_BAT',104),('GND',106.4),('VEH_IGN',108.8),('VEH_DOOR',111.2),('VEH_PARK',113.6),('VEH_AUX',116)]:
@@ -169,6 +177,24 @@ textout='\n'.join(schematic)+'\n'
 OUT_DIR = Path(__file__).resolve().parents[1]
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 Path(OUT_DIR / 'battery_monitor.kicad_sch').write_text(textout)
+
+# Register the generated symbol library and the standard footprint libraries used
+# by this prototype so headless ERC resolves the same libraries as KiCad.
+external_symbols=[]
+for ls in LIBS:
+    external_symbols.append(re.sub(r'\(symbol "BM:([^"]+)"', r'(symbol "\1"', ls, count=1))
+sym_lib='(kicad_symbol_lib (version 20231120) (generator "battery_monitor_generator")\n' + \
+        '\n'.join('  '+item.replace('\n','\n  ') for item in external_symbols) + '\n)\n'
+Path(OUT_DIR / 'BM.kicad_sym').write_text(sym_lib)
+Path(OUT_DIR / 'sym-lib-table').write_text(
+    '(sym_lib_table\n  (version 7)\n  (lib (name "BM")(type "KiCad")(uri "${KIPRJMOD}/BM.kicad_sym")(options "")(descr "Battery monitor generated symbols"))\n)\n'
+)
+fp_names=['Diode_SMD','Resistor_SMD','Capacitor_SMD','Package_SO','Package_TO_SOT_SMD']
+fp_rows='\n'.join(
+    f'  (lib (name "{name}")(type "KiCad")(uri "${{KICAD10_FOOTPRINT_DIR}}/{name}.pretty")(options "")(descr ""))'
+    for name in fp_names
+)
+Path(OUT_DIR / 'fp-lib-table').write_text(f'(fp_lib_table\n  (version 7)\n{fp_rows}\n)\n')
 
 pro={
   'board': {'3dviewports': [], 'design_settings': {'defaults': {}, 'diff_pair_dimensions': [], 'drc_exclusions': [], 'rules': {}, 'track_widths': [], 'via_dimensions': []}, 'layer_presets': [], 'viewports': []},
